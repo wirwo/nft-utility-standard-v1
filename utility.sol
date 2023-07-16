@@ -5,6 +5,8 @@ pragma solidity ^0.8.19;
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/IERC721Enumerable.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "./DynamicUtility.sol";
+import "./StaticUtility.sol";
 
 interface IOwnable {
         function owner() external view returns (address);
@@ -15,23 +17,11 @@ contract NFTUtilities is AccessControl {
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
     IOwnable public NFT;
 
-    struct DynamicUtility {
-        string name;
-        string description;
-        uint256 remainingUses;
-        mapping(address => bool) isUsed;
-        bool deleted;
-    }
+    using DynamicUtilities for DynamicUtilities.DynamicUtility[];
+    using StaticUtilities for StaticUtilities.StaticUtility[];
 
-    struct StaticUtility {
-        string name;
-        string description;
-        string url;
-        bool deleted;
-    }
-
-    mapping(address => mapping(uint256 => DynamicUtility[])) private _tokenDynamicUtilities;
-    mapping(address => mapping(uint256 => StaticUtility[])) private _tokenStaticUtilities;
+    mapping(address => mapping(uint256 => DynamicUtilities.DynamicUtility[])) private _tokenDynamicUtilities;
+    mapping(address => mapping(uint256 => StaticUtilities.StaticUtility[])) private _tokenStaticUtilities;
     mapping(uint256 => uint256[]) private dynamicUtilityToTokens;
     mapping(uint256 => uint256[]) private staticUtilityToTokens;
     mapping(uint256 => address) private dynamicUtilityToToken;
@@ -58,16 +48,7 @@ contract NFTUtilities is AccessControl {
         address token = address(NFT);
 
         for (uint256 i = 0; i < tokenIds.length; i++) {
-            _tokenDynamicUtilities[token][tokenIds[i]].push();
-            uint256 utilityIndex = _tokenDynamicUtilities[token][tokenIds[i]].length - 1;
-            _tokenDynamicUtilities[token][tokenIds[i]][utilityIndex].name = utilityName;
-            _tokenDynamicUtilities[token][tokenIds[i]][utilityIndex].description = utilityDescription;
-            _tokenDynamicUtilities[token][tokenIds[i]][utilityIndex].remainingUses = uses;
-            _tokenDynamicUtilities[token][tokenIds[i]][utilityIndex].deleted = false;
-
-            dynamicUtilityToTokens[utilityIndex].push(i);
-            dynamicUtilityToToken[utilityIndex] = token;
-
+            _tokenDynamicUtilities[token][tokenIds[i]].addDynamicUtility(utilityName, utilityDescription, uses);
         }
     }
 
@@ -78,15 +59,7 @@ contract NFTUtilities is AccessControl {
         uint256 supply = IERC721Enumerable(token).totalSupply();
 
         for (uint256 i = 1; i <= supply; i++) {
-            _tokenDynamicUtilities[token][i].push();
-            uint256 utilityIndex = _tokenDynamicUtilities[token][i].length - 1;
-            _tokenDynamicUtilities[token][i][utilityIndex].name = utilityName;
-            _tokenDynamicUtilities[token][i][utilityIndex].description = utilityDescription;
-            _tokenDynamicUtilities[token][i][utilityIndex].remainingUses = uses;
-            _tokenDynamicUtilities[token][i][utilityIndex].deleted = false;
-
-            dynamicUtilityToTokens[utilityIndex].push(i);
-            dynamicUtilityToToken[utilityIndex] = token;
+            _tokenDynamicUtilities[token][i].addDynamicUtility(utilityName, utilityDescription, uses);
 
         }
     }
@@ -96,11 +69,7 @@ contract NFTUtilities is AccessControl {
 
         address token = address(NFT);  
 
-        StaticUtility memory staticUtility;
-        staticUtility.name = utilityName;
-        staticUtility.description = utilityDescription;
-        staticUtility.url = utilityUrl;
-        staticUtility.deleted = false;
+        StaticUtilities.StaticUtility memory staticUtility = StaticUtilities.addStaticUtility(utilityName, utilityDescription, utilityUrl);
 
         for (uint256 i = 0; i < tokenIds.length; i++) {
             _tokenStaticUtilities[token][tokenIds[i]].push(staticUtility);
@@ -117,17 +86,16 @@ contract NFTUtilities is AccessControl {
             
         address token = address(NFT);  
         uint256 supply = IERC721Enumerable(token).totalSupply();
+
+        StaticUtilities.StaticUtility memory staticUtility = StaticUtilities.addStaticUtility(utilityName, utilityDescription, utilityUrl);
+
         for (uint256 i = 1; i <= supply; i++) {
-            _tokenStaticUtilities[token][i].push();
-            uint256 utilityIndex = _tokenDynamicUtilities[token][i].length - 1;
-            _tokenStaticUtilities[token][i][utilityIndex].name = utilityName;
-            _tokenStaticUtilities[token][i][utilityIndex].description = utilityDescription;
-            _tokenStaticUtilities[token][i][utilityIndex].url = utilityUrl;
-            _tokenStaticUtilities[token][i][utilityIndex].deleted = false;
+            _tokenStaticUtilities[token][i].push(staticUtility);
+
+            uint256 utilityIndex = _tokenStaticUtilities[token][i].length - 1;
 
             staticUtilityToTokens[utilityIndex].push(i);
             staticUtilityToToken[utilityIndex] = token;
-
         }
     }
 
@@ -191,7 +159,7 @@ contract NFTUtilities is AccessControl {
 
     function getTokenDynamicUtilities(uint256 tokenId) public view returns (string[] memory, string[] memory, uint256[] memory, bool[] memory) {
         address token = address(NFT);  
-        DynamicUtility[] storage utilities = _tokenDynamicUtilities[token][tokenId];
+        DynamicUtilities.DynamicUtility[] storage utilities = _tokenDynamicUtilities[token][tokenId];
         uint256 length = utilities.length;
         string[] memory names = new string[](length);
         string[] memory descriptions = new string[](length);
@@ -211,7 +179,7 @@ contract NFTUtilities is AccessControl {
 
     function getTokenStaticUtilities(uint256 tokenId) public view returns (string[] memory, string[] memory, string[] memory, bool[] memory) {
         address token = address(NFT);  
-        StaticUtility[] storage utilities = _tokenStaticUtilities[token][tokenId];
+        StaticUtilities.StaticUtility[] storage utilities = _tokenStaticUtilities[token][tokenId];
         uint256 length = utilities.length;
         
         string[] memory names = new string[](length);
