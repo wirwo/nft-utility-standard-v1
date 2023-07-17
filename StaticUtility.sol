@@ -17,6 +17,13 @@ library StaticUtilities {
             deleted: false
         });
     }
+
+    function addStaticUtilityToAll(StaticUtility storage utility, string memory utilityName, string memory utilityDescription, string memory utilityUrl) internal {
+        utility.name = utilityName;
+        utility.description = utilityDescription;
+        utility.url = utilityUrl;
+        utility.deleted = false;
+    }
     
     function editStaticUtility(StaticUtility storage utility, string memory newUtilityName, string memory newUtilityDescription, string memory newUtilityUrl) internal {
         utility.name = newUtilityName;

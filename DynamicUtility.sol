@@ -19,6 +19,13 @@ library DynamicUtilities {
         utilities[utilityIndex].deleted = false;
     }
 
+    function addDynamicUtilityToAll(DynamicUtility storage utility, string memory utilityName, string memory utilityDescription, uint256 uses) internal {
+        utility.name = utilityName;
+        utility.description = utilityDescription;
+        utility.remainingUses = uses;
+        utility.deleted = false;
+    }
+
     function editDynamicUtility(DynamicUtility storage utility, string memory newUtilityName, string memory newUtilityDescription, uint256 newUses) internal {
         utility.name = newUtilityName;
         utility.description = newUtilityDescription;
