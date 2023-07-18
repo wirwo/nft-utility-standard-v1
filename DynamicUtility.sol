@@ -3,23 +3,15 @@ pragma solidity ^0.8.19;
 
 library DynamicUtilities {
     struct DynamicUtility {
+        uint256 id;
         string name;
         string description;
         uint256 remainingUses;
-        mapping(address => bool) isUsed;
         bool deleted;
     }
 
-    function addDynamicUtility(DynamicUtility[] storage utilities, string memory utilityName, string memory utilityDescription, uint256 uses) internal {
-        utilities.push();
-        uint256 utilityIndex = utilities.length - 1;
-        utilities[utilityIndex].name = utilityName;
-        utilities[utilityIndex].description = utilityDescription;
-        utilities[utilityIndex].remainingUses = uses;
-        utilities[utilityIndex].deleted = false;
-    }
-
-    function addDynamicUtilityToAll(DynamicUtility storage utility, string memory utilityName, string memory utilityDescription, uint256 uses) internal {
+    function addDynamicUtilityToAll(DynamicUtility storage utility, uint256 utilityId, string memory utilityName, string memory utilityDescription, uint256 uses) internal {
+        utility.id = utilityId; 
         utility.name = utilityName;
         utility.description = utilityDescription;
         utility.remainingUses = uses;

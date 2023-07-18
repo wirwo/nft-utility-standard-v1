@@ -3,22 +3,15 @@ pragma solidity ^0.8.19;
 
 library StaticUtilities {
     struct StaticUtility {
+        uint256 id;
         string name;
         string description;
         string url;
         bool deleted;
     }
 
-    function addStaticUtility(string memory utilityName, string memory utilityDescription, string memory utilityUrl) internal pure returns (StaticUtility memory) {
-        return StaticUtility({
-            name: utilityName,
-            description: utilityDescription,
-            url: utilityUrl,
-            deleted: false
-        });
-    }
-
-    function addStaticUtilityToAll(StaticUtility storage utility, string memory utilityName, string memory utilityDescription, string memory utilityUrl) internal {
+    function addStaticUtilityToAll(StaticUtility storage utility, uint256 utilityId, string memory utilityName, string memory utilityDescription, string memory utilityUrl) internal {
+        utility.id = utilityId; 
         utility.name = utilityName;
         utility.description = utilityDescription;
         utility.url = utilityUrl;
@@ -36,5 +29,3 @@ library StaticUtilities {
     }
 
 }
-
-//hi

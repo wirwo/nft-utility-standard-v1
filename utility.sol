@@ -12,7 +12,6 @@ interface IOwnable {
         function owner() external view returns (address);
     }
 
-
 contract NFTUtilities is AccessControl {
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
     IOwnable public NFT;
@@ -20,21 +19,35 @@ contract NFTUtilities is AccessControl {
     using DynamicUtilities for DynamicUtilities.DynamicUtility[];
     using StaticUtilities for StaticUtilities.StaticUtility[];
 
-    mapping(address => mapping(uint256 => DynamicUtilities.DynamicUtility[])) private _tokenDynamicUtilities;
-    mapping(address => mapping(uint256 => StaticUtilities.StaticUtility[])) private _tokenStaticUtilities;
-    mapping(uint256 => uint256[]) private dynamicUtilityToTokens;
-    mapping(uint256 => uint256[]) private staticUtilityToTokens;
-    mapping(uint256 => address) private dynamicUtilityToToken;
-    mapping(uint256 => address) private staticUtilityToToken;
-    
-    //"All Purposed"
+    //Dynamic Utility Mappings
     mapping(uint256 => DynamicUtilities.DynamicUtility) private _allDynamicUtilities;
     uint256 private _dynamicUtilityCounter = 0;
 
+    mapping(uint256 => DynamicUtilities.DynamicUtility[]) private _specificDynamicUtilities;
+    uint256 private _specificDynamicUtilityCounter = 0;
+
+    mapping(uint256 => mapping(uint256 => DynamicUtilities.DynamicUtility)) private _editedUtilities;
+
+    //Static Utility Mappings
     mapping(uint256 => StaticUtilities.StaticUtility) private _allStaticUtilities;
     uint256 private _staticUtilityCounter = 0;
 
-    event UtilityUsed(address indexed user, address indexed token, uint256 indexed tokenId, uint256 utilityIndex);
+    mapping(uint256 => StaticUtilities.StaticUtility[]) private _specificStaticUtilities;
+    uint256 private _specificStaticUtilityCounter = 0;
+
+    mapping(uint256 => mapping(uint256 => StaticUtilities.StaticUtility)) private _editedStaticUtilities;
+
+
+    mapping(uint256 => uint256) private _lastUpdated;
+    mapping(uint256 => mapping(uint256 => uint256)) private _lastChecked;
+    
+    uint256 private _globalUtilityCounter = 0;
+    mapping(uint256 => uint256) private _utilityToTokenId;
+    mapping(uint256 => bool) private _isUtilitySpecific;
+    mapping(uint256 => uint256) private _utilityToSpecificIndex;
+
+    
+
 
     constructor(address _NFT) {
         require(IOwnable(_NFT).owner() == _msgSender(), "NFTUtilities: Deployer is not owner of the NFT contract");
@@ -48,189 +61,261 @@ contract NFTUtilities is AccessControl {
         grantRole(ADMIN_ROLE, newAdmin);
     }
 
+
+    //Start of Static Functions
     function addTokenDynamicUtility(uint256[] memory tokenIds, string memory utilityName, string memory utilityDescription, uint256 uses) public {
         require(hasRole(ADMIN_ROLE, _msgSender()), "NFTUtilities: must have admin role to add utility");
 
-        address token = address(NFT);
-
         for (uint256 i = 0; i < tokenIds.length; i++) {
-            _tokenDynamicUtilities[token][tokenIds[i]].addDynamicUtility(utilityName, utilityDescription, uses);
+            uint256 id = tokenIds[i];
+            DynamicUtilities.DynamicUtility storage newUtility = _specificDynamicUtilities[id].push();
+            newUtility.id = _globalUtilityCounter;
+            newUtility.name = utilityName;
+            newUtility.description = utilityDescription;
+            newUtility.remainingUses = uses;
+            newUtility.deleted = false;
+            _utilityToTokenId[_globalUtilityCounter] = id;
+            _utilityToSpecificIndex[_globalUtilityCounter] = _specificDynamicUtilities[id].length - 1;
+            _isUtilitySpecific[_globalUtilityCounter] = true;
+            _globalUtilityCounter++;
         }
+        _dynamicUtilityCounter++;
     }
+
 
     function addDynamicUtilityToAll(string memory utilityName, string memory utilityDescription, uint256 uses) public {
         require(hasRole(ADMIN_ROLE, _msgSender()), "NFTUtilities: must have admin role to add utility");
 
-        DynamicUtilities.DynamicUtility storage utility = _allDynamicUtilities[_dynamicUtilityCounter++];
-        DynamicUtilities.addDynamicUtilityToAll(utility, utilityName, utilityDescription, uses);
+        DynamicUtilities.DynamicUtility storage utility = _allDynamicUtilities[_dynamicUtilityCounter];
+        DynamicUtilities.addDynamicUtilityToAll(utility, _globalUtilityCounter, utilityName, utilityDescription, uses); 
+        _isUtilitySpecific[_globalUtilityCounter] = false;
 
+        _globalUtilityCounter++;
+        _dynamicUtilityCounter++;
     }
 
+    function editDynamicUtility(uint256 utilityId, string memory newUtilityName, string memory newUtilityDescription, uint256 newUses) public {
+        require(hasRole(ADMIN_ROLE, _msgSender()), "NFTUtilities: must have admin role to edit utility");
+        if (_isUtilitySpecific[utilityId]) {
+            uint256 tokenId = _utilityToTokenId[utilityId];
+            uint256 index = _utilityToSpecificIndex[utilityId];
+            DynamicUtilities.editDynamicUtility(_specificDynamicUtilities[tokenId][index], newUtilityName, newUtilityDescription, newUses);
+        } else {
+            DynamicUtilities.editDynamicUtility(_allDynamicUtilities[utilityId], newUtilityName, newUtilityDescription, newUses);
+        }
+        _lastUpdated[utilityId] = block.number;
+    }
+
+
+    
+    function deleteDynamicUtility(uint256 utilityId) public {
+        require(hasRole(ADMIN_ROLE, _msgSender()), "NFTUtilities: must have admin role to delete utility");
+        if (_isUtilitySpecific[utilityId]) {
+            uint256 tokenId = _utilityToTokenId[utilityId];
+            uint256 index = _utilityToSpecificIndex[utilityId];
+            DynamicUtilities.deleteDynamicUtility(_specificDynamicUtilities[tokenId][index]);
+        } else {
+            DynamicUtilities.deleteDynamicUtility(_allDynamicUtilities[utilityId]);
+        }
+        _lastUpdated[utilityId] = block.number;
+    }
+
+
+
+    function useUtility(uint256 tokenId, uint256 utilityId) public {
+        address token = address(NFT);
+
+        require(IERC721Enumerable(token).ownerOf(tokenId) == _msgSender(), "NFTUtilities: caller does not own the token");
+
+        DynamicUtilities.DynamicUtility storage utility;
+
+        if (!_isUtilitySpecific[utilityId]) {
+            // The utility is from _allDynamicUtilities
+            if (_editedUtilities[utilityId][tokenId].id != 0) {
+                utility = _editedUtilities[utilityId][tokenId];
+            } else {
+                utility = _allDynamicUtilities[utilityId];
+            }
+        } else {
+            // The utility is from _specificDynamicUtilities
+            uint256 specificTokenId = _utilityToTokenId[utilityId];
+            require(specificTokenId == tokenId, "NFTUtilities: utility not assigned to this token");
+
+            if (_editedUtilities[utilityId][tokenId].id != 0) {
+                utility = _editedUtilities[utilityId][tokenId];
+            } else {
+                utility = _specificDynamicUtilities[tokenId][utilityId];
+            }
+        }
+
+        require(!utility.deleted, "NFTUtilities: This utility has been deleted");
+        require(utility.remainingUses >= 1, "NFTUtilities: no remaining uses for utility");
+
+        utility.remainingUses--;
+    }
+
+
+    struct UtilityData {
+        string name;
+        string description;
+        uint256 remainingUses;
+        bool deleted;
+    }
+
+    function getTokenDynamicUtilities(uint256 tokenId) public view returns (UtilityData[] memory) {
+        uint256 totalUtilityLength = _globalUtilityCounter;
+        uint256 relevantUtilityCounter = 0;
+
+        // First pass to count relevant utilities
+        for (uint256 i = 0; i < totalUtilityLength; i++) {
+            if (!_isUtilitySpecific[i] || _utilityToTokenId[i] == tokenId) {
+                // If the utility is global or it is specific to this token
+                DynamicUtilities.DynamicUtility storage utility = _isUtilitySpecific[i] ? _specificDynamicUtilities[tokenId][_utilityToSpecificIndex[i]] : _allDynamicUtilities[i];
+
+                // If the utility has been edited for this token
+                if (_editedUtilities[i][tokenId].id != 0) {
+                    utility = _editedUtilities[i][tokenId];
+                }
+
+                if (!utility.deleted) {
+                    relevantUtilityCounter++;
+                }
+            }
+        }
+
+        // Now create an array with the correct size
+        UtilityData[] memory utilities = new UtilityData[](relevantUtilityCounter);
+
+        // Second pass to fill the new array
+        uint256 currentUtilityIndex = 0;
+        for (uint256 i = 0; i < totalUtilityLength; i++) {
+            if (!_isUtilitySpecific[i] || _utilityToTokenId[i] == tokenId) {
+                // If the utility is global or it is specific to this token
+                DynamicUtilities.DynamicUtility storage utility = _isUtilitySpecific[i] ? _specificDynamicUtilities[tokenId][_utilityToSpecificIndex[i]] : _allDynamicUtilities[i];
+
+                // If the utility has been edited for this token
+                if (_editedUtilities[i][tokenId].id != 0) {
+                    utility = _editedUtilities[i][tokenId];
+                }
+
+                if (!utility.deleted) {
+                    utilities[currentUtilityIndex++] = UtilityData(utility.name, utility.description, utility.remainingUses, utility.deleted);
+                }
+            }
+        }
+
+        return utilities;
+    }
+
+    //Start of Static Functions
     function addTokenStaticUtility(uint256[] memory tokenIds, string memory utilityName, string memory utilityDescription, string memory utilityUrl) public {
         require(hasRole(ADMIN_ROLE, _msgSender()), "NFTUtilities: must have admin role to add utility");
 
-        address token = address(NFT);  
-
-        StaticUtilities.StaticUtility memory staticUtility = StaticUtilities.addStaticUtility(utilityName, utilityDescription, utilityUrl);
-
         for (uint256 i = 0; i < tokenIds.length; i++) {
-            _tokenStaticUtilities[token][tokenIds[i]].push(staticUtility);
-
-            uint256 utilityIndex = _tokenStaticUtilities[token][tokenIds[i]].length - 1;
-
-            staticUtilityToTokens[utilityIndex].push(i);
-            staticUtilityToToken[utilityIndex] = token;
+            uint256 id = tokenIds[i];
+            StaticUtilities.StaticUtility storage newUtility = _specificStaticUtilities[id].push();
+            newUtility.name = utilityName;
+            newUtility.description = utilityDescription;
+            newUtility.url = utilityUrl;
+            newUtility.deleted = false;
+            _utilityToTokenId[_globalUtilityCounter] = id;
+            _utilityToSpecificIndex[_globalUtilityCounter] = _specificStaticUtilities[id].length - 1;
+            _isUtilitySpecific[_globalUtilityCounter] = true;
+            _globalUtilityCounter++;
         }
+        _staticUtilityCounter++;
     }
 
     function addStaticUtilityToAll(string memory utilityName, string memory utilityDescription, string memory utilityUrl) public {
         require(hasRole(ADMIN_ROLE, _msgSender()), "NFTUtilities: must have admin role to add utility");
 
-        StaticUtilities.StaticUtility storage utility = _allStaticUtilities[_staticUtilityCounter++];
-        StaticUtilities.addStaticUtilityToAll(utility, utilityName, utilityDescription, utilityUrl);
+        StaticUtilities.StaticUtility storage utility = _allStaticUtilities[_staticUtilityCounter];
+        StaticUtilities.addStaticUtilityToAll(utility, _globalUtilityCounter, utilityName, utilityDescription, utilityUrl); 
+        _isUtilitySpecific[_globalUtilityCounter] = false;
+
+        _globalUtilityCounter++;
+        _staticUtilityCounter++;
     }
 
-    function editDynamicUtilityFromAll(uint256 utilityId, string memory newUtilityName, string memory newUtilityDescription, uint256 newUses) public {
+    function editStaticUtility(uint256 utilityId, string memory newUtilityName, string memory newUtilityDescription, string memory newUtilityUrl) public {
         require(hasRole(ADMIN_ROLE, _msgSender()), "NFTUtilities: must have admin role to edit utility");
 
-        if (utilityId < _dynamicUtilityCounter) {
-            // Edit utility in _allDynamicUtilities
-            DynamicUtilities.editDynamicUtility(_allDynamicUtilities[utilityId], newUtilityName, newUtilityDescription, newUses);
+        if (_isUtilitySpecific[utilityId]) {
+            uint256 tokenId = _utilityToTokenId[utilityId];
+            uint256 index = _utilityToSpecificIndex[utilityId];
+            StaticUtilities.editStaticUtility(_specificStaticUtilities[tokenId][index], newUtilityName, newUtilityDescription, newUtilityUrl);
         } else {
-            // Edit utility in _tokenDynamicUtilities
-            address token = dynamicUtilityToToken[utilityId];
-            uint256[] memory tokenIds = dynamicUtilityToTokens[utilityId];
-            for (uint256 i = 0; i < tokenIds.length; i++) {
-                uint256 tokenId = tokenIds[i];
-                DynamicUtilities.editDynamicUtility(_tokenDynamicUtilities[token][tokenId][utilityId - _dynamicUtilityCounter], newUtilityName, newUtilityDescription, newUses);
-            }
+            StaticUtilities.editStaticUtility(_allStaticUtilities[utilityId], newUtilityName, newUtilityDescription, newUtilityUrl);
         }
+        _lastUpdated[utilityId] = block.number;
     }
 
-    function editStaticUtilityFromAll(uint256 utilityId, string memory newUtilityName, string memory newUtilityDescription, string memory newUrl) public {
-        require(hasRole(ADMIN_ROLE, _msgSender()), "NFTUtilities: must have admin role to edit utility");
-
-        if (utilityId < _staticUtilityCounter) {
-            StaticUtilities.editStaticUtility(_allStaticUtilities[utilityId], newUtilityName, newUtilityDescription, newUrl);
-        } else {
-            address token = staticUtilityToToken[utilityId];
-            uint256[] memory tokenIds = staticUtilityToTokens[utilityId];
-            for (uint256 i = 0; i < tokenIds.length; i++) {
-                uint256 tokenId = tokenIds[i];
-                StaticUtilities.editStaticUtility(_tokenStaticUtilities[token][tokenId][utilityId - _staticUtilityCounter], newUtilityName, newUtilityDescription, newUrl);
-            }
-        }
-    }      
-
-
-    function deleteDynamicUtilityFromAll(uint256 utilityId) public {
+    function deleteStaticUtility(uint256 utilityId) public {
         require(hasRole(ADMIN_ROLE, _msgSender()), "NFTUtilities: must have admin role to delete utility");
 
-        if (utilityId < _dynamicUtilityCounter) {
-            // Delete utility in _allDynamicUtilities
-            DynamicUtilities.deleteDynamicUtility(_allDynamicUtilities[utilityId]);
+        if (_isUtilitySpecific[utilityId]) {
+            uint256 tokenId = _utilityToTokenId[utilityId];
+            uint256 index = _utilityToSpecificIndex[utilityId];
+            StaticUtilities.deleteStaticUtility(_specificStaticUtilities[tokenId][index]);
         } else {
-            // Delete utility in _tokenDynamicUtilities
-            address token = dynamicUtilityToToken[utilityId];
-            uint256[] memory tokenIds = dynamicUtilityToTokens[utilityId];
-            for (uint256 i = 0; i < tokenIds.length; i++) {
-                uint256 tokenId = tokenIds[i];
-                DynamicUtilities.deleteDynamicUtility(_tokenDynamicUtilities[token][tokenId][utilityId - _dynamicUtilityCounter]);
-            }
-        }
-    }
-    
-
-    function deleteStaticUtilityFromAll(uint256 utilityId) public {
-        require(hasRole(ADMIN_ROLE, _msgSender()), "NFTUtilities: must have admin role to delete utility");
-
-        if (utilityId < _staticUtilityCounter) {
             StaticUtilities.deleteStaticUtility(_allStaticUtilities[utilityId]);
-        } else {
-            address token = staticUtilityToToken[utilityId];
-            uint256[] memory tokenIds = staticUtilityToTokens[utilityId];
-            for (uint256 i = 0; i < tokenIds.length; i++) {
-                uint256 tokenId = tokenIds[i];
-                StaticUtilities.deleteStaticUtility(_tokenStaticUtilities[token][tokenId][utilityId - _staticUtilityCounter]);
+        }
+        _lastUpdated[utilityId] = block.number;
+    }
+
+    struct UtilityData1 {
+            uint256 id;
+            string name;
+            string description;
+            string url;
+            bool deleted;
+        }
+    
+    function getTokenStaticUtilities(uint256 tokenId) public view returns (UtilityData1[] memory) {
+        uint256 totalUtilityLength = _globalUtilityCounter;
+        uint256 relevantUtilityCounter = 0;
+
+        // First pass to count relevant utilities
+        for (uint256 i = 0; i < totalUtilityLength; i++) {
+            if (!_isUtilitySpecific[i] || _utilityToTokenId[i] == tokenId) {
+                StaticUtilities.StaticUtility storage utility = _isUtilitySpecific[i] ? _specificStaticUtilities[tokenId][_utilityToSpecificIndex[i]] : _allStaticUtilities[i];
+
+                // If the utility has been edited for this token
+                if (_editedStaticUtilities[i][tokenId].id != 0) {
+                    utility = _editedStaticUtilities[i][tokenId];
+                }
+
+                if (!utility.deleted) {
+                    relevantUtilityCounter++;
+                }
             }
         }
+
+        // Now create an array with the correct size
+        UtilityData1[] memory utilities = new UtilityData1[](relevantUtilityCounter);
+
+        // Second pass to fill the new array
+        uint256 currentUtilityIndex = 0;
+        for (uint256 i = 0; i < totalUtilityLength; i++) {
+            if (!_isUtilitySpecific[i] || _utilityToTokenId[i] == tokenId) {
+                StaticUtilities.StaticUtility storage utility = _isUtilitySpecific[i] ? _specificStaticUtilities[tokenId][_utilityToSpecificIndex[i]] : _allStaticUtilities[i];
+
+                // If the utility has been edited for this token
+                if (_editedStaticUtilities[i][tokenId].id != 0) {
+                    utility = _editedStaticUtilities[i][tokenId];
+                }
+
+                if (!utility.deleted) {
+                    utilities[currentUtilityIndex].id = i;
+                    utilities[currentUtilityIndex].name = utility.name;
+                    utilities[currentUtilityIndex].description = utility.description;
+                    utilities[currentUtilityIndex].url = utility.url;
+                    currentUtilityIndex++;
+                }
+            }
+        }
+
+        return utilities;
     }
 
-    function useUtility(uint256 tokenId, uint256 utilityIndex) public {
-        address token = address(NFT);
-        DynamicUtilities.DynamicUtility storage utility;
-
-        if (utilityIndex < _dynamicUtilityCounter) {
-            // The utility is from _allDynamicUtilities
-            utility = _allDynamicUtilities[utilityIndex];
-        } else {
-            // The utility is from _tokenDynamicUtilities
-            utility = _tokenDynamicUtilities[token][tokenId][utilityIndex - _dynamicUtilityCounter];
-        }
-
-        require(utility.remainingUses >= 1, "NFTUtilities: no remaining uses for utility");
-        require(IERC721Enumerable(token).ownerOf(tokenId) == _msgSender(), "NFTUtilities: caller does not own the token");
-
-        utility.remainingUses--;
-        emit UtilityUsed(_msgSender(), token, tokenId, utilityIndex);
-    }
-
-
-    function getTokenDynamicUtilities(uint256 tokenId) public view returns (string[] memory, string[] memory, uint256[] memory, bool[] memory) {
-        address token = address(NFT);
-        DynamicUtilities.DynamicUtility[] storage utilities = _tokenDynamicUtilities[token][tokenId];
-        uint256 length = utilities.length + _dynamicUtilityCounter; // added counter here
-        string[] memory names = new string[](length);
-        string[] memory descriptions = new string[](length);
-        uint256[] memory remainingUses = new uint256[](length);
-        bool[] memory deleted = new bool[](length);
-
-        // Fill data from specific utilities
-        for (uint256 i = 0; i < utilities.length; i++) {
-            names[i] = utilities[i].name;
-            descriptions[i] = utilities[i].description;
-            remainingUses[i] = utilities[i].remainingUses;
-            deleted[i] = utilities[i].deleted;
-        }
-
-        // Fill data from general utilities
-        for (uint256 i = 0; i < _dynamicUtilityCounter; i++) {
-            DynamicUtilities.DynamicUtility storage utility = _allDynamicUtilities[i];
-            names[utilities.length + i] = utility.name;
-            descriptions[utilities.length + i] = utility.description;
-            remainingUses[utilities.length + i] = utility.remainingUses;
-            deleted[utilities.length + i] = utility.deleted;
-        }
-
-        return (names, descriptions, remainingUses, deleted);
-    }
-
-    function getTokenStaticUtilities(uint256 tokenId) public view returns (string[] memory, string[] memory, string[] memory, bool[] memory) {
-        address token = address(NFT);
-        StaticUtilities.StaticUtility[] storage utilities = _tokenStaticUtilities[token][tokenId];
-        uint256 length = utilities.length + _staticUtilityCounter; // added counter here
-        string[] memory names = new string[](length);
-        string[] memory descriptions = new string[](length);
-        string[] memory url = new string[](length);
-        bool[] memory deleted = new bool[](length);
-
-        // Fill data from specific utilities
-        for (uint256 i = 0; i < utilities.length; i++) {
-            names[i] = utilities[i].name;
-            descriptions[i] = utilities[i].description;
-            url[i] = utilities[i].url;
-            deleted[i] = utilities[i].deleted;
-        }
-
-        // Fill data from general utilities
-        for (uint256 i = 0; i < _staticUtilityCounter; i++) {
-            StaticUtilities.StaticUtility storage utility = _allStaticUtilities[i];
-            names[utilities.length + i] = utility.name;
-            descriptions[utilities.length + i] = utility.description;
-            url[utilities.length + i] = utility.url;
-            deleted[utilities.length + i] = utility.deleted;
-        }
-
-        return (names, descriptions, url, deleted);
-    }
 }
