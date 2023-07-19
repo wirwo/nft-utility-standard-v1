@@ -10,6 +10,8 @@ import "./StaticUtility.sol";
 
 interface IOwnable {
         function owner() external view returns (address);
+        function MAX_SUPPLY() external view returns (uint256);
+
     }
 
 contract NFTUtilities is AccessControl {
@@ -46,8 +48,6 @@ contract NFTUtilities is AccessControl {
     mapping(uint256 => bool) private _isUtilitySpecific;
     mapping(uint256 => uint256) private _utilityToSpecificIndex;
 
-    
-
 
     constructor(address _NFT) {
         require(IOwnable(_NFT).owner() == _msgSender(), "NFTUtilities: Deployer is not owner of the NFT contract");
@@ -68,6 +68,7 @@ contract NFTUtilities is AccessControl {
 
         for (uint256 i = 0; i < tokenIds.length; i++) {
             uint256 id = tokenIds[i];
+            require(id < NFT.MAX_SUPPLY(), "NFTUtilities: tokenId exceeds total supply");
             DynamicUtilities.DynamicUtility storage newUtility = _specificDynamicUtilities[id].push();
             newUtility.id = _globalUtilityCounter;
             newUtility.name = utilityName;
@@ -85,7 +86,7 @@ contract NFTUtilities is AccessControl {
 
     function addDynamicUtilityToAll(string memory utilityName, string memory utilityDescription, uint256 uses) public {
         require(hasRole(ADMIN_ROLE, _msgSender()), "NFTUtilities: must have admin role to add utility");
-
+        
         DynamicUtilities.DynamicUtility storage utility = _allDynamicUtilities[_dynamicUtilityCounter];
         DynamicUtilities.addDynamicUtilityToAll(utility, _globalUtilityCounter, utilityName, utilityDescription, uses); 
         _isUtilitySpecific[_globalUtilityCounter] = false;
@@ -126,7 +127,7 @@ contract NFTUtilities is AccessControl {
         address token = address(NFT);
 
         require(IERC721Enumerable(token).ownerOf(tokenId) == _msgSender(), "NFTUtilities: caller does not own the token");
-
+        require(tokenId < NFT.MAX_SUPPLY(), "NFTUtilities: tokenId exceeds total supply");
         DynamicUtilities.DynamicUtility storage utility;
 
         if (!_isUtilitySpecific[utilityId]) {
@@ -165,7 +166,7 @@ contract NFTUtilities is AccessControl {
     function getTokenDynamicUtilities(uint256 tokenId) public view returns (UtilityData[] memory) {
         uint256 totalUtilityLength = _globalUtilityCounter;
         uint256 relevantUtilityCounter = 0;
-
+        require(tokenId < NFT.MAX_SUPPLY(), "NFTUtilities: tokenId exceeds total supply");
         // First pass to count relevant utilities
         for (uint256 i = 0; i < totalUtilityLength; i++) {
             if (!_isUtilitySpecific[i] || _utilityToTokenId[i] == tokenId) {
@@ -213,6 +214,7 @@ contract NFTUtilities is AccessControl {
 
         for (uint256 i = 0; i < tokenIds.length; i++) {
             uint256 id = tokenIds[i];
+            require(id < NFT.MAX_SUPPLY(), "NFTUtilities: tokenId exceeds total supply");
             StaticUtilities.StaticUtility storage newUtility = _specificStaticUtilities[id].push();
             newUtility.name = utilityName;
             newUtility.description = utilityDescription;
@@ -274,6 +276,7 @@ contract NFTUtilities is AccessControl {
     function getTokenStaticUtilities(uint256 tokenId) public view returns (UtilityData1[] memory) {
         uint256 totalUtilityLength = _globalUtilityCounter;
         uint256 relevantUtilityCounter = 0;
+        require(tokenId < NFT.MAX_SUPPLY(), "NFTUtilities: tokenId exceeds total supply");
 
         // First pass to count relevant utilities
         for (uint256 i = 0; i < totalUtilityLength; i++) {
@@ -317,5 +320,6 @@ contract NFTUtilities is AccessControl {
 
         return utilities;
     }
+
 
 }
