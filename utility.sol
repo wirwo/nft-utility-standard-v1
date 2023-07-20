@@ -11,15 +11,29 @@ import "./StaticUtility.sol";
 interface IOwnable {
         function owner() external view returns (address);
         function MAX_SUPPLY() external view returns (uint256);
-
     }
 
 contract NFTUtilities is AccessControl {
+    using DynamicUtilities for DynamicUtilities.DynamicUtility[];
+    using StaticUtilities for StaticUtilities.StaticUtility[];
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
     IOwnable public NFT;
 
-    using DynamicUtilities for DynamicUtilities.DynamicUtility[];
-    using StaticUtilities for StaticUtilities.StaticUtility[];
+    //Structs
+    struct DynamicUtilityData {
+        string name;
+        string description;
+        uint256 remainingUses;
+        bool deleted;
+    }
+
+    struct StaticUtilityData {
+        uint256 id;
+        string name;
+        string description;
+        string url;
+        bool deleted;
+    }
 
     //Dynamic Utility Mappings
     mapping(uint256 => DynamicUtilities.DynamicUtility) private _allDynamicUtilities;
@@ -39,14 +53,12 @@ contract NFTUtilities is AccessControl {
 
     mapping(uint256 => mapping(uint256 => StaticUtilities.StaticUtility)) private _editedStaticUtilities;
 
-
     mapping(uint256 => uint256) private _lastUpdated;
     mapping(uint256 => mapping(uint256 => uint256)) private _lastChecked;
-    
-    uint256 private _globalUtilityCounter = 0;
     mapping(uint256 => uint256) private _utilityToTokenId;
     mapping(uint256 => bool) private _isUtilitySpecific;
     mapping(uint256 => uint256) private _utilityToSpecificIndex;
+    uint256 private _globalUtilityCounter = 0;
 
 
     constructor(address _NFT) {
@@ -107,8 +119,6 @@ contract NFTUtilities is AccessControl {
         _lastUpdated[utilityId] = block.number;
     }
 
-
-    
     function deleteDynamicUtility(uint256 utilityId) public {
         require(hasRole(ADMIN_ROLE, _msgSender()), "NFTUtilities: must have admin role to delete utility");
         if (_isUtilitySpecific[utilityId]) {
@@ -125,7 +135,6 @@ contract NFTUtilities is AccessControl {
 
     function useUtility(uint256 tokenId, uint256 utilityId) public {
         address token = address(NFT);
-
         require(IERC721Enumerable(token).ownerOf(tokenId) == _msgSender(), "NFTUtilities: caller does not own the token");
         require(tokenId < NFT.MAX_SUPPLY(), "NFTUtilities: tokenId exceeds total supply");
         DynamicUtilities.DynamicUtility storage utility;
@@ -155,15 +164,7 @@ contract NFTUtilities is AccessControl {
         utility.remainingUses--;
     }
 
-
-    struct UtilityData {
-        string name;
-        string description;
-        uint256 remainingUses;
-        bool deleted;
-    }
-
-    function getTokenDynamicUtilities(uint256 tokenId) public view returns (UtilityData[] memory) {
+    function getTokenDynamicUtilities(uint256 tokenId) public view returns (DynamicUtilityData[] memory) {
         uint256 totalUtilityLength = _globalUtilityCounter;
         uint256 relevantUtilityCounter = 0;
         require(tokenId < NFT.MAX_SUPPLY(), "NFTUtilities: tokenId exceeds total supply");
@@ -185,7 +186,7 @@ contract NFTUtilities is AccessControl {
         }
 
         // Now create an array with the correct size
-        UtilityData[] memory utilities = new UtilityData[](relevantUtilityCounter);
+        DynamicUtilityData[] memory utilities = new DynamicUtilityData[](relevantUtilityCounter);
 
         // Second pass to fill the new array
         uint256 currentUtilityIndex = 0;
@@ -200,7 +201,7 @@ contract NFTUtilities is AccessControl {
                 }
 
                 if (!utility.deleted) {
-                    utilities[currentUtilityIndex++] = UtilityData(utility.name, utility.description, utility.remainingUses, utility.deleted);
+                    utilities[currentUtilityIndex++] = DynamicUtilityData(utility.name, utility.description, utility.remainingUses, utility.deleted);
                 }
             }
         }
@@ -264,16 +265,8 @@ contract NFTUtilities is AccessControl {
         }
         _lastUpdated[utilityId] = block.number;
     }
-
-    struct UtilityData1 {
-            uint256 id;
-            string name;
-            string description;
-            string url;
-            bool deleted;
-        }
     
-    function getTokenStaticUtilities(uint256 tokenId) public view returns (UtilityData1[] memory) {
+    function getTokenStaticUtilities(uint256 tokenId) public view returns (StaticUtilityData[] memory) {
         uint256 totalUtilityLength = _globalUtilityCounter;
         uint256 relevantUtilityCounter = 0;
         require(tokenId < NFT.MAX_SUPPLY(), "NFTUtilities: tokenId exceeds total supply");
@@ -295,7 +288,7 @@ contract NFTUtilities is AccessControl {
         }
 
         // Now create an array with the correct size
-        UtilityData1[] memory utilities = new UtilityData1[](relevantUtilityCounter);
+        StaticUtilityData[] memory utilities = new StaticUtilityData[](relevantUtilityCounter);
 
         // Second pass to fill the new array
         uint256 currentUtilityIndex = 0;
