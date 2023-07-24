@@ -79,7 +79,7 @@ contract NFTUtilities is AccessControl {
 
     //Start of Static Functions
     function addTokenDynamicUtility(uint256[] memory tokenIds, string memory utilityName, string memory utilityDescription, uint256 uses) public {
-        require(_isNftHolder(_msgSender()), "NFTUtilities: must have admin role to add utility");
+        require(_isNftHolder(_msgSender()), "NFTUtilities: must be a holder to add utility");
 
         for (uint256 i = 0; i < tokenIds.length; i++) {
             uint256 id = tokenIds[i];
@@ -100,7 +100,7 @@ contract NFTUtilities is AccessControl {
 
 
     function addDynamicUtilityToAll(string memory utilityName, string memory utilityDescription, uint256 uses) public {
-        require(hasRole(ADMIN_ROLE, _msgSender()), "NFTUtilities: must have admin role to add utility");
+        require(_isNftHolder(_msgSender()), "NFTUtilities: must be a holder to add utility");
         
         DynamicUtilities.DynamicUtility storage utility = _allDynamicUtilities[_dynamicUtilityCounter];
         DynamicUtilities.addDynamicUtilityToAll(utility, _globalUtilityCounter, utilityName, utilityDescription, uses); 
@@ -111,7 +111,7 @@ contract NFTUtilities is AccessControl {
     }
 
     function editDynamicUtility(uint256 utilityId, string memory newUtilityName, string memory newUtilityDescription, uint256 newUses) public {
-        require(hasRole(ADMIN_ROLE, _msgSender()), "NFTUtilities: must have admin role to edit utility");
+        require(_isNftHolder(_msgSender()), "NFTUtilities: must be a holder to add utility");
         if (_isUtilitySpecific[utilityId]) {
             uint256 tokenId = _utilityToTokenId[utilityId];
             uint256 index = _utilityToSpecificIndex[utilityId];
@@ -123,7 +123,7 @@ contract NFTUtilities is AccessControl {
     }
 
     function deleteDynamicUtility(uint256 utilityId) public {
-        require(hasRole(ADMIN_ROLE, _msgSender()), "NFTUtilities: must have admin role to delete utility");
+        require(_isNftHolder(_msgSender()), "NFTUtilities: must be a holder to add utility");
         if (_isUtilitySpecific[utilityId]) {
             uint256 tokenId = _utilityToTokenId[utilityId];
             uint256 index = _utilityToSpecificIndex[utilityId];
