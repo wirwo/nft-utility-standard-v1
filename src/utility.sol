@@ -6,7 +6,6 @@ import "../node_modules/@openzeppelin/contracts/access/Ownable.sol";
 import "../node_modules/@openzeppelin/contracts/token/ERC721/extensions/IERC721Enumerable.sol";
 import "../node_modules/@openzeppelin/contracts/access/AccessControl.sol";
 import "./DynamicUtility.sol";
-import "./StaticUtility.sol";
 
 interface IOwnable {    
         function owner() external view returns (address);
@@ -15,56 +14,35 @@ interface IOwnable {
 
 contract NFTUtilities is AccessControl {
     using DynamicUtilities for DynamicUtilities.DynamicUtility[];
-    using StaticUtilities for StaticUtilities.StaticUtility[];
-    bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
+    
     IOwnable public NFT;
 
-    //Structs
     struct DynamicUtilityData {
         string name;
         string description;
-        uint256 remainingUses;
-        bool deleted;
-    }
-
-    struct StaticUtilityData {
-        uint256 id;
-        string name;
-        string description;
+        string image;
         string url;
+        uint256 remainingUses;
+        uint256 expiryTimestamp;
         bool deleted;
     }
 
-    //Dynamic Utility Mappings
+    // Utility Mappings
     mapping(uint256 => DynamicUtilities.DynamicUtility) private _allDynamicUtilities;
-    uint256 private _dynamicUtilityCounter = 0;
-
     mapping(uint256 => DynamicUtilities.DynamicUtility[]) private _specificDynamicUtilities;
-    uint256 private _specificDynamicUtilityCounter = 0;
-
     mapping(uint256 => mapping(uint256 => DynamicUtilities.DynamicUtility)) private _editedUtilities;
 
-    //Static Utility Mappings
-    mapping(uint256 => StaticUtilities.StaticUtility) private _allStaticUtilities;
-    uint256 private _staticUtilityCounter = 0;
-
-    mapping(uint256 => StaticUtilities.StaticUtility[]) private _specificStaticUtilities;
-    uint256 private _specificStaticUtilityCounter = 0;
-
-    mapping(uint256 => mapping(uint256 => StaticUtilities.StaticUtility)) private _editedStaticUtilities;
-
+    // Mappings for utility tracking and identification
     mapping(uint256 => uint256) private _lastUpdated;
-    mapping(uint256 => mapping(uint256 => uint256)) private _lastChecked;
     mapping(uint256 => uint256) private _utilityToTokenId;
     mapping(uint256 => bool) private _isUtilitySpecific;
     mapping(uint256 => uint256) private _utilityToSpecificIndex;
-    uint256 private _globalUtilityCounter = 0;
 
+    // Utility counter
+    uint256 private _globalUtilityCounter = 0;
 
     constructor(address _NFT) {
         require(IOwnable(_NFT).owner() == _msgSender(), "NFTUtilities: Deployer is not owner of the NFT contract");
-        _setupRole(DEFAULT_ADMIN_ROLE, _msgSender());
-        _setupRole(ADMIN_ROLE, _msgSender());
         NFT = IOwnable(_NFT);
     }
 
@@ -77,47 +55,40 @@ contract NFTUtilities is AccessControl {
         return false;
     }
 
-    //Start of Static Functions
-    function addTokenDynamicUtility(uint256[] memory tokenIds, string memory utilityName, string memory utilityDescription, uint256 uses) public {
+    function addTokenDynamicUtility(uint256[] memory tokenIds, string memory utilityName, string memory utilityDescription, string memory utilityImage, string memory utilityUrl, uint256 uses, uint256 utilityExpiry) public {
         require(_isNftHolder(_msgSender()), "NFTUtilities: must be a holder to add utility");
 
         for (uint256 i = 0; i < tokenIds.length; i++) {
             uint256 id = tokenIds[i];
             require(id < NFT.MAX_SUPPLY(), "NFTUtilities: tokenId exceeds total supply");
             DynamicUtilities.DynamicUtility storage newUtility = _specificDynamicUtilities[id].push();
-            newUtility.id = _globalUtilityCounter;
-            newUtility.name = utilityName;
-            newUtility.description = utilityDescription;
-            newUtility.remainingUses = uses;
-            newUtility.deleted = false;
+            DynamicUtilities.addDynamicUtilityToAll(newUtility, _globalUtilityCounter, utilityName, utilityDescription, utilityImage, utilityUrl, uses, utilityExpiry); 
+
             _utilityToTokenId[_globalUtilityCounter] = id;
             _utilityToSpecificIndex[_globalUtilityCounter] = _specificDynamicUtilities[id].length - 1;
             _isUtilitySpecific[_globalUtilityCounter] = true;
             _globalUtilityCounter++;
         }
-        _dynamicUtilityCounter++;
     }
 
-
-    function addDynamicUtilityToAll(string memory utilityName, string memory utilityDescription, uint256 uses) public {
+    function addDynamicUtilityToAll(string memory utilityName, string memory utilityDescription, string memory utilityImage, string memory utilityUrl, uint256 uses, uint256 utilityExpiry) public {
         require(_isNftHolder(_msgSender()), "NFTUtilities: must be a holder to add utility");
         
-        DynamicUtilities.DynamicUtility storage utility = _allDynamicUtilities[_dynamicUtilityCounter];
-        DynamicUtilities.addDynamicUtilityToAll(utility, _globalUtilityCounter, utilityName, utilityDescription, uses); 
+        DynamicUtilities.DynamicUtility storage utility = _allDynamicUtilities[_globalUtilityCounter];
+        DynamicUtilities.addDynamicUtilityToAll(utility, _globalUtilityCounter, utilityName, utilityDescription, utilityImage, utilityUrl, uses, utilityExpiry); 
         _isUtilitySpecific[_globalUtilityCounter] = false;
 
         _globalUtilityCounter++;
-        _dynamicUtilityCounter++;
     }
 
-    function editDynamicUtility(uint256 utilityId, string memory newUtilityName, string memory newUtilityDescription, uint256 newUses) public {
+    function editDynamicUtility(uint256 utilityId, string memory newUtilityName, string memory newUtilityDescription, string memory newImage, string memory newUrl, uint256 newUses, uint256 newExpiry) public {
         require(_isNftHolder(_msgSender()), "NFTUtilities: must be a holder to add utility");
         if (_isUtilitySpecific[utilityId]) {
             uint256 tokenId = _utilityToTokenId[utilityId];
             uint256 index = _utilityToSpecificIndex[utilityId];
-            DynamicUtilities.editDynamicUtility(_specificDynamicUtilities[tokenId][index], newUtilityName, newUtilityDescription, newUses);
+            DynamicUtilities.editDynamicUtility(_specificDynamicUtilities[tokenId][index], newUtilityName, newUtilityDescription, newImage, newUrl, newUses, newExpiry);
         } else {
-            DynamicUtilities.editDynamicUtility(_allDynamicUtilities[utilityId], newUtilityName, newUtilityDescription, newUses);
+            DynamicUtilities.editDynamicUtility(_allDynamicUtilities[utilityId], newUtilityName, newUtilityDescription, newImage, newUrl, newUses, newExpiry);
         }
         _lastUpdated[utilityId] = block.number;
     }
@@ -135,11 +106,11 @@ contract NFTUtilities is AccessControl {
     }
 
 
-
     function useUtility(uint256 tokenId, uint256 utilityId) public {
         address token = address(NFT);
         require(IERC721Enumerable(token).ownerOf(tokenId) == _msgSender(), "NFTUtilities: caller does not own the token");
         require(tokenId < NFT.MAX_SUPPLY(), "NFTUtilities: tokenId exceeds total supply");
+
         DynamicUtilities.DynamicUtility storage utility;
 
         if (!_isUtilitySpecific[utilityId]) {
@@ -160,7 +131,7 @@ contract NFTUtilities is AccessControl {
                 utility = _specificDynamicUtilities[tokenId][utilityId];
             }
         }
-
+        require(utility.expiryTimestamp > block.timestamp, "NFTUtilities: utility has expired");
         require(!utility.deleted, "NFTUtilities: This utility has been deleted");
         require(utility.remainingUses >= 1, "NFTUtilities: no remaining uses for utility");
 
@@ -204,118 +175,12 @@ contract NFTUtilities is AccessControl {
                 }
 
                 if (!utility.deleted) {
-                    utilities[currentUtilityIndex++] = DynamicUtilityData(utility.name, utility.description, utility.remainingUses, utility.deleted);
+                    utilities[currentUtilityIndex++] = DynamicUtilityData(utility.name, utility.description, utility.image, utility.url, utility.remainingUses, utility.expiryTimestamp, utility.deleted);
                 }
             }
         }
 
         return utilities;
     }
-
-    //Start of Static Functions
-    function addTokenStaticUtility(uint256[] memory tokenIds, string memory utilityName, string memory utilityDescription, string memory utilityUrl) public {
-        require(hasRole(ADMIN_ROLE, _msgSender()), "NFTUtilities: must have admin role to add utility");
-
-        for (uint256 i = 0; i < tokenIds.length; i++) {
-            uint256 id = tokenIds[i];
-            require(id < NFT.MAX_SUPPLY(), "NFTUtilities: tokenId exceeds total supply");
-            StaticUtilities.StaticUtility storage newUtility = _specificStaticUtilities[id].push();
-            newUtility.name = utilityName;
-            newUtility.description = utilityDescription;
-            newUtility.url = utilityUrl;
-            newUtility.deleted = false;
-            _utilityToTokenId[_globalUtilityCounter] = id;
-            _utilityToSpecificIndex[_globalUtilityCounter] = _specificStaticUtilities[id].length - 1;
-            _isUtilitySpecific[_globalUtilityCounter] = true;
-            _globalUtilityCounter++;
-        }
-        _staticUtilityCounter++;
-    }
-
-    function addStaticUtilityToAll(string memory utilityName, string memory utilityDescription, string memory utilityUrl) public {
-        require(hasRole(ADMIN_ROLE, _msgSender()), "NFTUtilities: must have admin role to add utility");
-
-        StaticUtilities.StaticUtility storage utility = _allStaticUtilities[_staticUtilityCounter];
-        StaticUtilities.addStaticUtilityToAll(utility, _globalUtilityCounter, utilityName, utilityDescription, utilityUrl); 
-        _isUtilitySpecific[_globalUtilityCounter] = false;
-
-        _globalUtilityCounter++;
-        _staticUtilityCounter++;
-    }
-
-    function editStaticUtility(uint256 utilityId, string memory newUtilityName, string memory newUtilityDescription, string memory newUtilityUrl) public {
-        require(hasRole(ADMIN_ROLE, _msgSender()), "NFTUtilities: must have admin role to edit utility");
-
-        if (_isUtilitySpecific[utilityId]) {
-            uint256 tokenId = _utilityToTokenId[utilityId];
-            uint256 index = _utilityToSpecificIndex[utilityId];
-            StaticUtilities.editStaticUtility(_specificStaticUtilities[tokenId][index], newUtilityName, newUtilityDescription, newUtilityUrl);
-        } else {
-            StaticUtilities.editStaticUtility(_allStaticUtilities[utilityId], newUtilityName, newUtilityDescription, newUtilityUrl);
-        }
-        _lastUpdated[utilityId] = block.number;
-    }
-
-    function deleteStaticUtility(uint256 utilityId) public {
-        require(hasRole(ADMIN_ROLE, _msgSender()), "NFTUtilities: must have admin role to delete utility");
-
-        if (_isUtilitySpecific[utilityId]) {
-            uint256 tokenId = _utilityToTokenId[utilityId];
-            uint256 index = _utilityToSpecificIndex[utilityId];
-            StaticUtilities.deleteStaticUtility(_specificStaticUtilities[tokenId][index]);
-        } else {
-            StaticUtilities.deleteStaticUtility(_allStaticUtilities[utilityId]);
-        }
-        _lastUpdated[utilityId] = block.number;
-    }
-    
-    function getTokenStaticUtilities(uint256 tokenId) public view returns (StaticUtilityData[] memory) {
-        uint256 totalUtilityLength = _globalUtilityCounter;
-        uint256 relevantUtilityCounter = 0;
-        require(tokenId < NFT.MAX_SUPPLY(), "NFTUtilities: tokenId exceeds total supply");
-
-        // First pass to count relevant utilities
-        for (uint256 i = 0; i < totalUtilityLength; i++) {
-            if (!_isUtilitySpecific[i] || _utilityToTokenId[i] == tokenId) {
-                StaticUtilities.StaticUtility storage utility = _isUtilitySpecific[i] ? _specificStaticUtilities[tokenId][_utilityToSpecificIndex[i]] : _allStaticUtilities[i];
-
-                // If the utility has been edited for this token
-                if (_editedStaticUtilities[i][tokenId].id != 0) {
-                    utility = _editedStaticUtilities[i][tokenId];
-                }
-
-                if (!utility.deleted) {
-                    relevantUtilityCounter++;
-                }
-            }
-        }
-
-        // Now create an array with the correct size
-        StaticUtilityData[] memory utilities = new StaticUtilityData[](relevantUtilityCounter);
-
-        // Second pass to fill the new array
-        uint256 currentUtilityIndex = 0;
-        for (uint256 i = 0; i < totalUtilityLength; i++) {
-            if (!_isUtilitySpecific[i] || _utilityToTokenId[i] == tokenId) {
-                StaticUtilities.StaticUtility storage utility = _isUtilitySpecific[i] ? _specificStaticUtilities[tokenId][_utilityToSpecificIndex[i]] : _allStaticUtilities[i];
-
-                // If the utility has been edited for this token
-                if (_editedStaticUtilities[i][tokenId].id != 0) {
-                    utility = _editedStaticUtilities[i][tokenId];
-                }
-
-                if (!utility.deleted) {
-                    utilities[currentUtilityIndex].id = i;
-                    utilities[currentUtilityIndex].name = utility.name;
-                    utilities[currentUtilityIndex].description = utility.description;
-                    utilities[currentUtilityIndex].url = utility.url;
-                    currentUtilityIndex++;
-                }
-            }
-        }
-
-        return utilities;
-    }
-
 
 }
