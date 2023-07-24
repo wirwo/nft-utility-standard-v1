@@ -2,17 +2,13 @@
 
 pragma solidity ^0.8.19;
 
-import "@openzeppelin/contracts/access/AccessControl.sol";
-import "@openzeppelin/contracts/token/ERC721/extensions/IERC721Enumerable.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "../node_modules/@openzeppelin/contracts/access/Ownable.sol";
+import "../node_modules/@openzeppelin/contracts/token/ERC721/extensions/IERC721Enumerable.sol";
+import "../node_modules/@openzeppelin/contracts/access/AccessControl.sol";
 import "./DynamicUtility.sol";
 import "./StaticUtility.sol";
 
-error NotOwner();
-error NotAdmin();
-error ExceedMaxSupply();
-
-interface IOwnable {
+interface IOwnable {    
         function owner() external view returns (address);
         function MAX_SUPPLY() external view returns (uint256);
     }
@@ -21,7 +17,7 @@ contract NFTUtilities is AccessControl {
     using DynamicUtilities for DynamicUtilities.DynamicUtility[];
     using StaticUtilities for StaticUtilities.StaticUtility[];
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
-    IOwnable public immutable NFT;
+    IOwnable public NFT;
 
     //Structs
     struct DynamicUtilityData {
@@ -66,25 +62,28 @@ contract NFTUtilities is AccessControl {
 
 
     constructor(address _NFT) {
-        if(IOwnable(_NFT).owner() == _msgSender()) {revert NotOwner();}
+        require(IOwnable(_NFT).owner() == _msgSender(), "NFTUtilities: Deployer is not owner of the NFT contract");
         _setupRole(DEFAULT_ADMIN_ROLE, _msgSender());
         _setupRole(ADMIN_ROLE, _msgSender());
         NFT = IOwnable(_NFT);
     }
 
-    function addAdmin(address newAdmin) public {
-        if(hasRole(ADMIN_ROLE, _msgSender())) {revert NotAdmin();}
-        grantRole(ADMIN_ROLE, newAdmin);
+    function _isNftHolder(address holder) private view returns (bool) {
+        IERC721Enumerable token = IERC721Enumerable(address(NFT));
+        uint256 balance = token.balanceOf(holder);
+        if (balance > 0) {
+            return true;
+        }
+        return false;
     }
-
 
     //Start of Static Functions
     function addTokenDynamicUtility(uint256[] memory tokenIds, string memory utilityName, string memory utilityDescription, uint256 uses) public {
-        if(hasRole(ADMIN_ROLE, _msgSender())) {revert NotAdmin();}
+        require(_isNftHolder(_msgSender()), "NFTUtilities: must have admin role to add utility");
 
         for (uint256 i = 0; i < tokenIds.length; i++) {
             uint256 id = tokenIds[i];
-            if(id < NFT.MAX_SUPPLY()) {revert ExceedMaxSupply();}
+            require(id < NFT.MAX_SUPPLY(), "NFTUtilities: tokenId exceeds total supply");
             DynamicUtilities.DynamicUtility storage newUtility = _specificDynamicUtilities[id].push();
             newUtility.id = _globalUtilityCounter;
             newUtility.name = utilityName;
@@ -101,7 +100,7 @@ contract NFTUtilities is AccessControl {
 
 
     function addDynamicUtilityToAll(string memory utilityName, string memory utilityDescription, uint256 uses) public {
-        if(hasRole(ADMIN_ROLE, _msgSender())) {revert NotAdmin();}
+        require(hasRole(ADMIN_ROLE, _msgSender()), "NFTUtilities: must have admin role to add utility");
         
         DynamicUtilities.DynamicUtility storage utility = _allDynamicUtilities[_dynamicUtilityCounter];
         DynamicUtilities.addDynamicUtilityToAll(utility, _globalUtilityCounter, utilityName, utilityDescription, uses); 
@@ -112,7 +111,7 @@ contract NFTUtilities is AccessControl {
     }
 
     function editDynamicUtility(uint256 utilityId, string memory newUtilityName, string memory newUtilityDescription, uint256 newUses) public {
-        if(hasRole(ADMIN_ROLE, _msgSender())) {revert NotAdmin();}
+        require(hasRole(ADMIN_ROLE, _msgSender()), "NFTUtilities: must have admin role to edit utility");
         if (_isUtilitySpecific[utilityId]) {
             uint256 tokenId = _utilityToTokenId[utilityId];
             uint256 index = _utilityToSpecificIndex[utilityId];
@@ -124,7 +123,7 @@ contract NFTUtilities is AccessControl {
     }
 
     function deleteDynamicUtility(uint256 utilityId) public {
-        if(hasRole(ADMIN_ROLE, _msgSender())) {revert NotAdmin();}
+        require(hasRole(ADMIN_ROLE, _msgSender()), "NFTUtilities: must have admin role to delete utility");
         if (_isUtilitySpecific[utilityId]) {
             uint256 tokenId = _utilityToTokenId[utilityId];
             uint256 index = _utilityToSpecificIndex[utilityId];
@@ -136,10 +135,11 @@ contract NFTUtilities is AccessControl {
     }
 
 
+
     function useUtility(uint256 tokenId, uint256 utilityId) public {
         address token = address(NFT);
         require(IERC721Enumerable(token).ownerOf(tokenId) == _msgSender(), "NFTUtilities: caller does not own the token");
-        if(tokenId < NFT.MAX_SUPPLY()) {revert ExceedMaxSupply();}
+        require(tokenId < NFT.MAX_SUPPLY(), "NFTUtilities: tokenId exceeds total supply");
         DynamicUtilities.DynamicUtility storage utility;
 
         if (!_isUtilitySpecific[utilityId]) {
@@ -170,7 +170,7 @@ contract NFTUtilities is AccessControl {
     function getTokenDynamicUtilities(uint256 tokenId) public view returns (DynamicUtilityData[] memory) {
         uint256 totalUtilityLength = _globalUtilityCounter;
         uint256 relevantUtilityCounter = 0;
-        if(tokenId < NFT.MAX_SUPPLY()) {revert ExceedMaxSupply();}
+        require(tokenId < NFT.MAX_SUPPLY(), "NFTUtilities: tokenId exceeds total supply");
         // First pass to count relevant utilities
         for (uint256 i = 0; i < totalUtilityLength; i++) {
             if (!_isUtilitySpecific[i] || _utilityToTokenId[i] == tokenId) {
@@ -214,13 +214,12 @@ contract NFTUtilities is AccessControl {
 
     //Start of Static Functions
     function addTokenStaticUtility(uint256[] memory tokenIds, string memory utilityName, string memory utilityDescription, string memory utilityUrl) public {
-        if(hasRole(ADMIN_ROLE, _msgSender())) {revert NotAdmin();}
+        require(hasRole(ADMIN_ROLE, _msgSender()), "NFTUtilities: must have admin role to add utility");
 
         for (uint256 i = 0; i < tokenIds.length; i++) {
             uint256 id = tokenIds[i];
-            if(id < NFT.MAX_SUPPLY()) {revert ExceedMaxSupply();}
+            require(id < NFT.MAX_SUPPLY(), "NFTUtilities: tokenId exceeds total supply");
             StaticUtilities.StaticUtility storage newUtility = _specificStaticUtilities[id].push();
-            newUtility.id = _globalUtilityCounter;
             newUtility.name = utilityName;
             newUtility.description = utilityDescription;
             newUtility.url = utilityUrl;
@@ -234,7 +233,7 @@ contract NFTUtilities is AccessControl {
     }
 
     function addStaticUtilityToAll(string memory utilityName, string memory utilityDescription, string memory utilityUrl) public {
-        if(hasRole(ADMIN_ROLE, _msgSender())) {revert NotAdmin();}
+        require(hasRole(ADMIN_ROLE, _msgSender()), "NFTUtilities: must have admin role to add utility");
 
         StaticUtilities.StaticUtility storage utility = _allStaticUtilities[_staticUtilityCounter];
         StaticUtilities.addStaticUtilityToAll(utility, _globalUtilityCounter, utilityName, utilityDescription, utilityUrl); 
@@ -245,7 +244,7 @@ contract NFTUtilities is AccessControl {
     }
 
     function editStaticUtility(uint256 utilityId, string memory newUtilityName, string memory newUtilityDescription, string memory newUtilityUrl) public {
-        if(hasRole(ADMIN_ROLE, _msgSender())) {revert NotAdmin();}
+        require(hasRole(ADMIN_ROLE, _msgSender()), "NFTUtilities: must have admin role to edit utility");
 
         if (_isUtilitySpecific[utilityId]) {
             uint256 tokenId = _utilityToTokenId[utilityId];
@@ -258,7 +257,8 @@ contract NFTUtilities is AccessControl {
     }
 
     function deleteStaticUtility(uint256 utilityId) public {
-        if(hasRole(ADMIN_ROLE, _msgSender())) {revert NotAdmin();}
+        require(hasRole(ADMIN_ROLE, _msgSender()), "NFTUtilities: must have admin role to delete utility");
+
         if (_isUtilitySpecific[utilityId]) {
             uint256 tokenId = _utilityToTokenId[utilityId];
             uint256 index = _utilityToSpecificIndex[utilityId];
@@ -272,7 +272,7 @@ contract NFTUtilities is AccessControl {
     function getTokenStaticUtilities(uint256 tokenId) public view returns (StaticUtilityData[] memory) {
         uint256 totalUtilityLength = _globalUtilityCounter;
         uint256 relevantUtilityCounter = 0;
-        if(tokenId < NFT.MAX_SUPPLY()) {revert ExceedMaxSupply();}
+        require(tokenId < NFT.MAX_SUPPLY(), "NFTUtilities: tokenId exceeds total supply");
 
         // First pass to count relevant utilities
         for (uint256 i = 0; i < totalUtilityLength; i++) {
