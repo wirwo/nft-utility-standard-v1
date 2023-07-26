@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 pragma solidity ^0.8.19;
-import {NFTUtilities} from "./Utility.sol";
+import {NFTUtilities} from "./utility.sol";
 import "../node_modules/@openzeppelin/contracts/access/Ownable.sol";
 import "../node_modules/@openzeppelin/contracts/token/ERC721/extensions/IERC721Enumerable.sol";
 import "../node_modules/@openzeppelin/contracts/access/AccessControl.sol";

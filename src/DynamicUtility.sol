@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-library DynamicUtilities {
+library Utilities {
     struct DynamicUtility {
         uint256 id;
         string name;
