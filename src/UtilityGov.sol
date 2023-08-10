@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 pragma solidity ^0.8.19;
+
 import {NFTUtilities} from "./utility.sol";
 import "../node_modules/@openzeppelin/contracts/access/Ownable.sol";
 import "../node_modules/@openzeppelin/contracts/token/ERC721/extensions/IERC721Enumerable.sol";
@@ -20,10 +21,7 @@ contract UtilityProposal is AccessControl{
     struct Proposal {
         address proposer;
         uint256[] tokenIds;
-        string utilityName;
-        string utilityDescription;
-        string utilityImage;
-        string utilityUrl;
+        string uri;
         uint256 uses;
         uint256 utilityExpiry;
         uint256 forVotes;
@@ -48,10 +46,7 @@ contract UtilityProposal is AccessControl{
 
     function proposeUtility(
         uint256[] memory tokenIds,
-        string memory utilityName,
-        string memory utilityDescription,
-        string memory utilityImage,
-        string memory utilityUrl,
+        string memory uri,
         uint256 uses,
         uint256 utilityExpiry
     ) public {
@@ -63,10 +58,7 @@ contract UtilityProposal is AccessControl{
         proposals[proposalCount++] = Proposal(
             _msgSender(),
             tokenIds,
-            utilityName,
-            utilityDescription,
-            utilityImage, 
-            utilityUrl, 
+            uri,
             uses,
             utilityExpiry,
             0,
@@ -77,10 +69,7 @@ contract UtilityProposal is AccessControl{
     }
 
     function proposeUtilityToAll(
-        string memory utilityName,
-        string memory utilityDescription,
-        string memory utilityImage,
-        string memory utilityUrl,
+        string memory utilityURI,
         uint256 utilityExpiry,
         uint256 uses
     ) public {
@@ -92,10 +81,7 @@ contract UtilityProposal is AccessControl{
         proposals[proposalCount++] = Proposal(
             _msgSender(),
             new uint256[](0), // No specific tokenIds
-            utilityName,
-            utilityDescription,
-            utilityImage,
-            utilityUrl,
+            utilityURI,
             uses,
             utilityExpiry,
             0,
@@ -138,21 +124,15 @@ contract UtilityProposal is AccessControl{
         );
 
         if (proposal.isForAllTokens) {
-            nftUtilitiesInstance.addDynamicUtilityToAll(
-                proposal.utilityName,
-                proposal.utilityDescription,
-                proposal.utilityImage,
-                proposal.utilityUrl,
+            nftUtilitiesInstance.addUtilityToAll(
+                proposal.uri,
                 proposal.utilityExpiry, 
                 proposal.uses
             );
         } else {
-            nftUtilitiesInstance.addTokenDynamicUtility(
+            nftUtilitiesInstance.addUtility(
                 proposal.tokenIds,
-                proposal.utilityName,
-                proposal.utilityDescription,
-                proposal.utilityImage,
-                proposal.utilityUrl,
+                proposal.uri,
                 proposal.utilityExpiry, 
                 proposal.uses
             );

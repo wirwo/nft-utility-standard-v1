@@ -5,7 +5,7 @@ pragma solidity ^0.8.19;
 import "../node_modules/@openzeppelin/contracts/access/Ownable.sol";
 import "../node_modules/@openzeppelin/contracts/token/ERC721/extensions/IERC721Enumerable.sol";
 import "../node_modules/@openzeppelin/contracts/access/AccessControl.sol";
-import "./dynamicUtility.sol";
+import "./UtilityLibrary.sol";
 
 interface IOwnable {    
         function owner() external view returns (address);
@@ -13,24 +13,21 @@ interface IOwnable {
     }
 
 contract NFTUtilities is AccessControl {
-    using Utilities for Utilities.DynamicUtility[];
+    using Utilities for Utilities.Utility[];
     
     IOwnable public NFT;
 
-    struct DynamicUtilityData {
-        string name;
-        string description;
-        string image;
-        string url;
+    struct UtilityData {
+        string uri;
         uint256 remainingUses;
         uint256 expiryTimestamp;
         bool deleted;
     }
 
     // Utility Mappings
-    mapping(uint256 => Utilities.DynamicUtility) private _allDynamicUtilities;
-    mapping(uint256 => Utilities.DynamicUtility[]) private _specificDynamicUtilities;
-    mapping(uint256 => mapping(uint256 => Utilities.DynamicUtility)) private _editedUtilities;
+    mapping(uint256 => Utilities.Utility) private _allUtilities;
+    mapping(uint256 => Utilities.Utility[]) private _specificDynamicUtilities;
+    mapping(uint256 => mapping(uint256 => Utilities.Utility)) private _editedUtilities;
 
     // Mappings for utility tracking and identification
     mapping(uint256 => uint256) private _lastUpdated;
@@ -55,14 +52,14 @@ contract NFTUtilities is AccessControl {
         return false;
     }
 
-    function addTokenDynamicUtility(uint256[] memory tokenIds, string memory utilityName, string memory utilityDescription, string memory utilityImage, string memory utilityUrl, uint256 uses, uint256 utilityExpiry) public {
+    function addUtility(uint256[] memory tokenIds, string memory utilityURI, uint256 uses, uint256 utilityExpiry) public {
         require(_isNftHolder(_msgSender()), "NFTUtilities: must be a holder to add utility");
 
         for (uint256 i = 0; i < tokenIds.length; i++) {
             uint256 id = tokenIds[i];
             require(id < NFT.MAX_SUPPLY(), "NFTUtilities: tokenId exceeds total supply");
-            Utilities.DynamicUtility storage newUtility = _specificDynamicUtilities[id].push();
-            Utilities.addDynamicUtilityToAll(newUtility, _globalUtilityCounter, utilityName, utilityDescription, utilityImage, utilityUrl, uses, utilityExpiry); 
+            Utilities.Utility storage newUtility = _specificDynamicUtilities[id].push();
+            Utilities.addDynamicUtility(newUtility, _globalUtilityCounter, utilityURI, uses, utilityExpiry); 
 
             _utilityToTokenId[_globalUtilityCounter] = id;
             _utilityToSpecificIndex[_globalUtilityCounter] = _specificDynamicUtilities[id].length - 1;
@@ -71,36 +68,36 @@ contract NFTUtilities is AccessControl {
         }
     }
 
-    function addDynamicUtilityToAll(string memory utilityName, string memory utilityDescription, string memory utilityImage, string memory utilityUrl, uint256 uses, uint256 utilityExpiry) public {
+    function addUtilityToAll(string memory utilityURI, uint256 uses, uint256 utilityExpiry) public {
         require(_isNftHolder(_msgSender()), "NFTUtilities: must be a holder to add utility");
         
-        Utilities.DynamicUtility storage utility = _allDynamicUtilities[_globalUtilityCounter];
-        Utilities.addDynamicUtilityToAll(utility, _globalUtilityCounter, utilityName, utilityDescription, utilityImage, utilityUrl, uses, utilityExpiry); 
+        Utilities.Utility storage utility = _allUtilities[_globalUtilityCounter];
+        Utilities.addDynamicUtility(utility, _globalUtilityCounter, utilityURI, uses, utilityExpiry); 
         _isUtilitySpecific[_globalUtilityCounter] = false;
 
         _globalUtilityCounter++;
     }
 
-    function editDynamicUtility(uint256 utilityId, string memory newUtilityName, string memory newUtilityDescription, string memory newImage, string memory newUrl, uint256 newUses, uint256 newExpiry) public {
+    function editUtility(uint256 utilityId, string memory newUtilityURI, uint256 newUses, uint256 newExpiry) public {
         require(_isNftHolder(_msgSender()), "NFTUtilities: must be a holder to add utility");
         if (_isUtilitySpecific[utilityId]) {
             uint256 tokenId = _utilityToTokenId[utilityId];
             uint256 index = _utilityToSpecificIndex[utilityId];
-            Utilities.editDynamicUtility(_specificDynamicUtilities[tokenId][index], newUtilityName, newUtilityDescription, newImage, newUrl, newUses, newExpiry);
+            Utilities.editDynamicUtility(_specificDynamicUtilities[tokenId][index], newUtilityURI, newUses, newExpiry);
         } else {
-            Utilities.editDynamicUtility(_allDynamicUtilities[utilityId], newUtilityName, newUtilityDescription, newImage, newUrl, newUses, newExpiry);
+            Utilities.editDynamicUtility(_allUtilities[utilityId], newUtilityURI, newUses, newExpiry);
         }
         _lastUpdated[utilityId] = block.number;
     }
 
-    function deleteDynamicUtility(uint256 utilityId) public {
+    function deleteUtility(uint256 utilityId) public {
         require(_isNftHolder(_msgSender()), "NFTUtilities: must be a holder to add utility");
         if (_isUtilitySpecific[utilityId]) {
             uint256 tokenId = _utilityToTokenId[utilityId];
             uint256 index = _utilityToSpecificIndex[utilityId];
             Utilities.deleteDynamicUtility(_specificDynamicUtilities[tokenId][index]);
         } else {
-            Utilities.deleteDynamicUtility(_allDynamicUtilities[utilityId]);
+            Utilities.deleteDynamicUtility(_allUtilities[utilityId]);
         }
         _lastUpdated[utilityId] = block.number;
     }
@@ -111,14 +108,14 @@ contract NFTUtilities is AccessControl {
         require(IERC721Enumerable(token).ownerOf(tokenId) == _msgSender(), "NFTUtilities: caller does not own the token");
         require(tokenId < NFT.MAX_SUPPLY(), "NFTUtilities: tokenId exceeds total supply");
 
-        Utilities.DynamicUtility storage utility;
+        Utilities.Utility storage utility;
 
         if (!_isUtilitySpecific[utilityId]) {
-            // The utility is from _allDynamicUtilities
+            // The utility is from _allUtilities
             if (_editedUtilities[utilityId][tokenId].id != 0) {
                 utility = _editedUtilities[utilityId][tokenId];
             } else {
-                utility = _allDynamicUtilities[utilityId];
+                utility = _allUtilities[utilityId];
             }
         } else {
             // The utility is from _specificDynamicUtilities
@@ -138,7 +135,7 @@ contract NFTUtilities is AccessControl {
         utility.remainingUses--;
     }
 
-    function getTokenDynamicUtilities(uint256 tokenId) public view returns (DynamicUtilityData[] memory) {
+    function getUtility(uint256 tokenId) public view returns (UtilityData[] memory) {
         uint256 totalUtilityLength = _globalUtilityCounter;
         uint256 relevantUtilityCounter = 0;
         require(tokenId < NFT.MAX_SUPPLY(), "NFTUtilities: tokenId exceeds total supply");
@@ -146,7 +143,7 @@ contract NFTUtilities is AccessControl {
         for (uint256 i = 0; i < totalUtilityLength; i++) {
             if (!_isUtilitySpecific[i] || _utilityToTokenId[i] == tokenId) {
                 // If the utility is global or it is specific to this token
-                Utilities.DynamicUtility storage utility = _isUtilitySpecific[i] ? _specificDynamicUtilities[tokenId][_utilityToSpecificIndex[i]] : _allDynamicUtilities[i];
+                Utilities.Utility storage utility = _isUtilitySpecific[i] ? _specificDynamicUtilities[tokenId][_utilityToSpecificIndex[i]] : _allUtilities[i];
 
                 // If the utility has been edited for this token
                 if (_editedUtilities[i][tokenId].id != 0) {
@@ -160,14 +157,14 @@ contract NFTUtilities is AccessControl {
         }
 
         // Now create an array with the correct size
-        DynamicUtilityData[] memory utilities = new DynamicUtilityData[](relevantUtilityCounter);
+        UtilityData[] memory utilities = new UtilityData[](relevantUtilityCounter);
 
         // Second pass to fill the new array
         uint256 currentUtilityIndex = 0;
         for (uint256 i = 0; i < totalUtilityLength; i++) {
             if (!_isUtilitySpecific[i] || _utilityToTokenId[i] == tokenId) {
                 // If the utility is global or it is specific to this token
-                Utilities.DynamicUtility storage utility = _isUtilitySpecific[i] ? _specificDynamicUtilities[tokenId][_utilityToSpecificIndex[i]] : _allDynamicUtilities[i];
+                Utilities.Utility storage utility = _isUtilitySpecific[i] ? _specificDynamicUtilities[tokenId][_utilityToSpecificIndex[i]] : _allUtilities[i];
 
                 // If the utility has been edited for this token
                 if (_editedUtilities[i][tokenId].id != 0) {
@@ -175,7 +172,7 @@ contract NFTUtilities is AccessControl {
                 }
 
                 if (!utility.deleted) {
-                    utilities[currentUtilityIndex++] = DynamicUtilityData(utility.name, utility.description, utility.image, utility.url, utility.remainingUses, utility.expiryTimestamp, utility.deleted);
+                    utilities[currentUtilityIndex++] = UtilityData(utility.uri, utility.remainingUses, utility.expiryTimestamp, utility.deleted);
                 }
             }
         }
