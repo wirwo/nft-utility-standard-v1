@@ -71,10 +71,10 @@ contract NFTUtilities is AccessControl {
      * Only NFT holders can call this.
      * @param tokenIds list of NFT token IDs to add the utility to.
      * @param utilityURI URI of the utility's metadata.
-     * @param uses number of uses for the utility.
+     * @param utilityUses number of uses for the utility.
      * @param utilityExpiry expiration timestamp for the utility.
      */
-    function addUtility(uint256[] memory tokenIds, string memory utilityURI, uint256 uses, uint256 utilityExpiry) public {
+    function addUtility(uint256[] memory tokenIds, string memory utilityURI, uint256 utilityUses, uint256 utilityExpiry) public {
         // Ensure caller is an NFT holder
         require(_isNftHolder(_msgSender()), "NFTUtilities: must be a holder to add utility");
 
@@ -84,7 +84,7 @@ contract NFTUtilities is AccessControl {
             // Ensure the token ID is within the valid range
             require(id < NFT.MAX_SUPPLY(), "NFTUtilities: tokenId exceeds total supply");
             Utilities.Utility storage newUtility = _specificDynamicUtilities[id].push();
-            Utilities.addDynamicUtility(newUtility, _globalUtilityCounter, utilityURI, uses, utilityExpiry); 
+            Utilities.addDynamicUtility(newUtility, _globalUtilityCounter, utilityURI, utilityUses, utilityExpiry); 
 
             _utilityToTokenId[_globalUtilityCounter] = id;
             _utilityToSpecificIndex[_globalUtilityCounter] = _specificDynamicUtilities[id].length - 1;
@@ -97,15 +97,15 @@ contract NFTUtilities is AccessControl {
      * @dev Adds a utility to all tokens.
      * Only NFT holders can call this.
      * @param utilityURI URI of the utility's metadata.
-     * @param uses number of uses for the utility.
+     * @param utilityUses number of uses for the utility.
      * @param utilityExpiry expiration timestamp for the utility.
      */
-    function addUtilityToAll(string memory utilityURI, uint256 uses, uint256 utilityExpiry) public {
+    function addUtilityToAll(string memory utilityURI, uint256 utilityUses, uint256 utilityExpiry) public {
         // Ensure caller is an NFT holder
         require(_isNftHolder(_msgSender()), "NFTUtilities: must be a holder to add utility");
         
         Utilities.Utility storage utility = _allUtilities[_globalUtilityCounter];
-        Utilities.addDynamicUtility(utility, _globalUtilityCounter, utilityURI, uses, utilityExpiry); 
+        Utilities.addDynamicUtility(utility, _globalUtilityCounter, utilityURI, utilityUses, utilityExpiry); 
         _isUtilitySpecific[_globalUtilityCounter] = false;
 
         _globalUtilityCounter++;

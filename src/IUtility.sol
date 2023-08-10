@@ -26,15 +26,19 @@ interface INFTUtilities {
      * @dev This function allows a contract owner to add a utility to a specific set of NFTs, emitting a UtilityAdded event.
      * @param tokenIds An array of token Ids that the utility should be added to.
      * @param utilityURI The data URI for the utility (IPFS hash).
+     * @param utilityUses The utility's remaining number of uses.
+     * @param utilityExpiry The expiry date of the utility.
      */
-    function addTokenDynamicUtility(uint256[] memory tokenIds, string memory utilityURI) external;
+    function addTokenDynamicUtility(uint256[] memory tokenIds, string memory utilityURI, uint256 utilityUses, uint256 utilityExpiry) external;
     
     /**
      * @notice Function to add a utility to all NFTs in the collection.
      * @dev This function allows a contract owner to add a utility to all NFTs in the collection, emitting a UtilityAdded event.
      * @param utilityURI The data URI for the utility (IPFS hash).
+     * @param utilityUses The utility's remaining number of uses.
+     * @param utilityExpiry The expiry date of the utility.
      */
-    function addDynamicUtilityToAll(string memory utilityURI) external;
+    function addDynamicUtilityToAll(string memory utilityURI, uint256 utilityUses, uint256 utilityExpiry) external;
 
     /**
      * @notice Function to edit a utility from all the associated NFTs.
@@ -42,7 +46,7 @@ interface INFTUtilities {
      * @param utilityId The ID of the utility to be edited.
      * @param newUtilityURI The new data URI for the utility (IPFS hash).
    */
-    function editDynamicUtility(uint256 utilityId, string memory newUtilityURI) external;
+    function editDynamicUtility(uint256 utilityId, string memory newUtilityURI, uint256 newUses, uint256 newExpiry) external;
 
     /**
      * @notice Function to delete a utility from all the associated NFTs.
