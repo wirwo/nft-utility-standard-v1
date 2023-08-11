@@ -4,9 +4,9 @@ A solidity-based NFT utility management standard by [0xWira](https://www.prawira
 
 ## Overview
 
-NFTUtilities offers a comprehensive platform for NFT token holders to seamlessly assign, modify, and oversee utilities linked to their assets. This standard is compatible with leading web3 wallets like Phantom, Metamask, and Rainbow, so that utilities can be easily discovered by the holders. This framework is for NFT projects that wants to give practical rewards to their community beyond mere ownership of the token.
+NFTUtilities offers a comprehensive platform for NFT token holders to seamlessly assign, modify, and oversee utilities linked to their assets. This standard is compatible with web3 wallets like Phantom, Metamask, and Rainbow, so utilities can be easily discovered right on the wallet apps by the holders. This framework is made for NFT projects that wants to give practical rewards to their community beyond mere ownership of the token.
 
-Used Paradigm's [Foundry](https://github.com/foundry-rs/foundry)
+Using Paradigm's [Foundry](https://github.com/foundry-rs/foundry)
 
 ## Key Features
 
@@ -24,38 +24,40 @@ Used Paradigm's [Foundry](https://github.com/foundry-rs/foundry)
 
 - For specific tokens:
 
-```JavaScript
+```Solidity
 addUtility(tokenIds[], utilityURI, uses, utilityExpiry)
 ```
 
 - For all tokens:
 
-```JavaScript
+```Solidity
 addUtilityToAll(utilityURI, uses, utilityExpiry)
 ```
 
 **2. Editing Utilities:**
 
-```JavaScript
+```Solidity
 editUtility(utilityId, newUtilityURI, newUses, newExpiry)
 ```
 
 **3. Deleting Utilities:**
 
-```JavaScript
+```Solidity
 deleteUtility(utilityId)
 ```
 
 **4. Using a Utility:**
 
-```JavaScript
+```Solidity
 useUtility(tokenId, utilityId)
 ```
 
 **5. Getting Utilities for a Token:**
 
-```JavaScript
+```Solidity
 getUtility(tokenId)
 ```
 
 ## Tests
+
+Tests are located in the `tests/` directory.
