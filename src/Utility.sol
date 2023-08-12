@@ -56,15 +56,6 @@ contract NFTUtilities is AccessControl {
         require(IOwnable(_NFT).owner() == _msgSender(), "NFTUtilities: Deployer is not owner of the NFT contract");
         NFT = IOwnable(_NFT);
     }
-    
-    function _isNftHolder(address holder) private view returns (bool) {
-        IERC721Enumerable token = IERC721Enumerable(address(NFT));
-        uint256 balance = token.balanceOf(holder);
-        if (balance > 0) {
-            return true;
-        }
-        return false;
-    }
 
     /**
      * @dev Adds a utility to specific tokens.
@@ -75,9 +66,6 @@ contract NFTUtilities is AccessControl {
      * @param utilityExpiry expiration timestamp for the utility.
      */
     function addUtility(uint256[] memory tokenIds, string memory utilityURI, uint256 utilityUses, uint256 utilityExpiry) public {
-        // Ensure caller is an NFT holder
-        require(_isNftHolder(_msgSender()), "NFTUtilities: must be a holder to add utility");
-
         for (uint256 i = 0; i < tokenIds.length; i++) {
             uint256 id = tokenIds[i];
 
@@ -101,9 +89,6 @@ contract NFTUtilities is AccessControl {
      * @param utilityExpiry expiration timestamp for the utility.
      */
     function addUtilityToAll(string memory utilityURI, uint256 utilityUses, uint256 utilityExpiry) public {
-        // Ensure caller is an NFT holder
-        require(_isNftHolder(_msgSender()), "NFTUtilities: must be a holder to add utility");
-        
         Utilities.Utility storage utility = _allUtilities[_globalUtilityCounter];
         Utilities.addDynamicUtility(utility, _globalUtilityCounter, utilityURI, utilityUses, utilityExpiry); 
         _isUtilitySpecific[_globalUtilityCounter] = false;
@@ -120,9 +105,6 @@ contract NFTUtilities is AccessControl {
      * @param newExpiry Updated expiration timestamp for the utility.
      */
     function editUtility(uint256 utilityId, string memory newUtilityURI, uint256 newUses, uint256 newExpiry) public {
-        // Ensure caller is an NFT holder
-        require(_isNftHolder(_msgSender()), "NFTUtilities: must be a holder to add utility");
-        
         if (_isUtilitySpecific[utilityId]) {
             uint256 tokenId = _utilityToTokenId[utilityId];
             uint256 index = _utilityToSpecificIndex[utilityId];
@@ -139,9 +121,6 @@ contract NFTUtilities is AccessControl {
      * @param utilityId ID of the utility to be deleted.
      */
     function deleteUtility(uint256 utilityId) public {
-        // Ensure caller is an NFT holder
-        require(_isNftHolder(_msgSender()), "NFTUtilities: must be a holder to add utility");
-
         if (_isUtilitySpecific[utilityId]) {
             uint256 tokenId = _utilityToTokenId[utilityId];
             uint256 index = _utilityToSpecificIndex[utilityId];
