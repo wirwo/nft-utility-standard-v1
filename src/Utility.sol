@@ -26,23 +26,15 @@ contract NFTUtilities is AccessControl {
     
     IOwnable public NFT;
 
-    struct UtilityData {
-        string uri;
-        uint256 remainingUses;
-        uint256 expiryTimestamp;
-        bool deleted;
-    }
-
     // Mappings for utility data and tracking
     mapping(uint256 => Utilities.Utility) private _allUtilities;
-    mapping(uint256 => Utilities.Utility[]) private _specificDynamicUtilities;
-    mapping(uint256 => mapping(uint256 => Utilities.Utility)) private _editedUtilities;
 
     // Utility metadata mappings
-    mapping(uint256 => uint256) private _lastUpdated;
-    mapping(uint256 => uint256) private _utilityToTokenId;
     mapping(uint256 => bool) private _isUtilitySpecific;
-    mapping(uint256 => uint256) private _utilityToSpecificIndex;
+    mapping(uint256 => uint256[]) private _utilitiesOfToken;
+    mapping(uint256 => mapping(uint256 => uint256)) private _utilityRemainingUsesOfToken;
+    mapping(uint256 => mapping(uint256 => bool)) private _utilityHasBeenUsed;
+    mapping(uint256 => mapping(uint256 => bool)) private _tokenHasUtility;
 
     // Counter to ensure unique utility IDs
     uint256 private _globalUtilityCounter = 0;
@@ -71,14 +63,16 @@ contract NFTUtilities is AccessControl {
 
             // Ensure the token ID is within the valid range
             require(id < NFT.MAX_SUPPLY(), "NFTUtilities: tokenId exceeds total supply");
-            Utilities.Utility storage newUtility = _specificDynamicUtilities[id].push();
-            Utilities.addDynamicUtility(newUtility, _globalUtilityCounter, utilityURI, utilityUses, utilityExpiry); 
+            
+            Utilities.Utility storage utility = _allUtilities[_globalUtilityCounter];
+            Utilities.addDynamicUtility(utility, _globalUtilityCounter, utilityURI, utilityUses, utilityExpiry);
 
-            _utilityToTokenId[_globalUtilityCounter] = id;
-            _utilityToSpecificIndex[_globalUtilityCounter] = _specificDynamicUtilities[id].length - 1;
+            _utilitiesOfToken[id].push(_globalUtilityCounter);
             _isUtilitySpecific[_globalUtilityCounter] = true;
-            _globalUtilityCounter++;
+            _tokenHasUtility[id][_globalUtilityCounter] = true;
+
         }
+        _globalUtilityCounter++;
     }
 
     /**
@@ -105,14 +99,7 @@ contract NFTUtilities is AccessControl {
      * @param newExpiry Updated expiration timestamp for the utility.
      */
     function editUtility(uint256 utilityId, string memory newUtilityURI, uint256 newUses, uint256 newExpiry) public {
-        if (_isUtilitySpecific[utilityId]) {
-            uint256 tokenId = _utilityToTokenId[utilityId];
-            uint256 index = _utilityToSpecificIndex[utilityId];
-            Utilities.editDynamicUtility(_specificDynamicUtilities[tokenId][index], newUtilityURI, newUses, newExpiry);
-        } else {
-            Utilities.editDynamicUtility(_allUtilities[utilityId], newUtilityURI, newUses, newExpiry);
-        }
-        _lastUpdated[utilityId] = block.number;
+        Utilities.editDynamicUtility(_allUtilities[utilityId], newUtilityURI, newUses, newExpiry);
     }
 
     /**
@@ -121,14 +108,7 @@ contract NFTUtilities is AccessControl {
      * @param utilityId ID of the utility to be deleted.
      */
     function deleteUtility(uint256 utilityId) public {
-        if (_isUtilitySpecific[utilityId]) {
-            uint256 tokenId = _utilityToTokenId[utilityId];
-            uint256 index = _utilityToSpecificIndex[utilityId];
-            Utilities.deleteDynamicUtility(_specificDynamicUtilities[tokenId][index]);
-        } else {
-            Utilities.deleteDynamicUtility(_allUtilities[utilityId]);
-        }
-        _lastUpdated[utilityId] = block.number;
+        Utilities.deleteDynamicUtility(_allUtilities[utilityId]);
     }
 
     /**
@@ -137,83 +117,84 @@ contract NFTUtilities is AccessControl {
      * @param utilityId ID of the utility to be used.
      */
     function useUtility(uint256 tokenId, uint256 utilityId) public {
-        // Ensure the caller owns the specified token
-        address token = address(NFT);
-        require(IERC721Enumerable(token).ownerOf(tokenId) == _msgSender(), "NFTUtilities: caller does not own the token");
-        
-        // Ensure the token ID is within the valid range
-        require(tokenId < NFT.MAX_SUPPLY(), "NFTUtilities: tokenId exceeds total supply");
-
-        Utilities.Utility storage utility;
-
-        if (!_isUtilitySpecific[utilityId]) {
-            if (_editedUtilities[utilityId][tokenId].id != 0) {
-                utility = _editedUtilities[utilityId][tokenId];
-            } else {
-                utility = _allUtilities[utilityId];
-            }
-        } else {
-            uint256 specificTokenId = _utilityToTokenId[utilityId];
-            require(specificTokenId == tokenId, "NFTUtilities: utility not assigned to this token");
-
-            if (_editedUtilities[utilityId][tokenId].id != 0) {
-                utility = _editedUtilities[utilityId][tokenId];
-            } else {
-                utility = _specificDynamicUtilities[tokenId][utilityId];
-            }
+        // Check other utility conditions
+        if(_isUtilitySpecific[utilityId]){
+            require(_tokenHasUtility[tokenId][utilityId], "NFTUtilities: This token doesn't have the specified utility");
         }
-        require(utility.expiryTimestamp > block.timestamp, "NFTUtilities: utility has expired");
-        require(!utility.deleted, "NFTUtilities: This utility has been deleted");
-        require(utility.remainingUses >= 1, "NFTUtilities: no remaining uses for utility");
+        require(!_allUtilities[utilityId].deleted, "NFTUtilities: This utility has been deleted");
+        //require(_allUtilities[utilityId].expiryTimestamp > block.timestamp, "NFTUtilities: utility has expired");
 
-        utility.remainingUses--;
+
+        // Check if the utility's remaining uses for this token was ever initialized, if not, set it.
+        if (_utilityHasBeenUsed[tokenId][utilityId] == false) {
+            require(_allUtilities[utilityId].remainingUses > 0, "NFTUtilities: no remaining uses for utility");
+            _utilityRemainingUsesOfToken[tokenId][utilityId] = _allUtilities[utilityId].remainingUses;
+            _utilityHasBeenUsed[tokenId][utilityId] = true;
+        }
+        else{
+            require(_utilityRemainingUsesOfToken[tokenId][utilityId] > 0, "NFTUtilities: no remaining uses for utility");
+        }
+
+        // Reduce the remaining uses by 1 for the specific tokenId
+        _utilityRemainingUsesOfToken[tokenId][utilityId]--;
     }
-
+    
+    struct UtilityData {
+        string uri;
+        uint256 remainingUses;
+        uint256 expiryTimestamp;
+        bool deleted;
+    }
+    
     /**
      * @dev Retrieves utility data for a specific NFT token.
      * @param tokenId ID of the NFT token to query utilities for.
      * @return An array of utility data associated with the specified NFT token.
      */
     function getUtility(uint256 tokenId) public view returns (UtilityData[] memory) {
-        uint256 totalUtilityLength = _globalUtilityCounter;
-        uint256 relevantUtilityCounter = 0;
-
-        // Ensure the token ID is within the valid range
         require(tokenId < NFT.MAX_SUPPLY(), "NFTUtilities: tokenId exceeds total supply");
 
-        // First pass to count relevant utilities
-        for (uint256 i = 0; i < totalUtilityLength; i++) {
-            if (!_isUtilitySpecific[i] || _utilityToTokenId[i] == tokenId) {
-                Utilities.Utility storage utility = _isUtilitySpecific[i] ? _specificDynamicUtilities[tokenId][_utilityToSpecificIndex[i]] : _allUtilities[i];
+        // Create an array that is long enough to hold both specific and global utilities
+        UtilityData[] memory utilities = new UtilityData[](_globalUtilityCounter);
+        uint256 currentIndex = 0;
 
-                if (_editedUtilities[i][tokenId].id != 0) {
-                    utility = _editedUtilities[i][tokenId];
+        // Populate specific utilities
+        for (uint256 i = 0; i < _utilitiesOfToken[tokenId].length; i++) {
+            uint256 utilityId = _utilitiesOfToken[tokenId][i];
+            if (!_allUtilities[utilityId].deleted) {
+                uint256 remainingUses = _allUtilities[utilityId].remainingUses;
+            
+                // If the utility's remaining uses for this token were modified, get that value
+                if (_utilityHasBeenUsed[tokenId][utilityId] == true) {
+                    remainingUses = _utilityRemainingUsesOfToken[tokenId][utilityId];
                 }
 
-                if (!utility.deleted) {
-                    relevantUtilityCounter++;
-                }
+                utilities[currentIndex] = UtilityData(_allUtilities[utilityId].uri, remainingUses, _allUtilities[utilityId].expiryTimestamp, _allUtilities[utilityId].deleted);
+                currentIndex++;
             }
         }
 
-        UtilityData[] memory utilities = new UtilityData[](relevantUtilityCounter);
-
-        uint256 currentUtilityIndex = 0;
-        for (uint256 i = 0; i < totalUtilityLength; i++) {
-            if (!_isUtilitySpecific[i] || _utilityToTokenId[i] == tokenId) {
-                Utilities.Utility storage utility = _isUtilitySpecific[i] ? _specificDynamicUtilities[tokenId][_utilityToSpecificIndex[i]] : _allUtilities[i];
-
-                if (_editedUtilities[i][tokenId].id != 0) {
-                    utility = _editedUtilities[i][tokenId];
+        // Populate global utilities
+        for (uint256 i = 0; i < _globalUtilityCounter; i++) {
+            if (!_allUtilities[i].deleted && !_isUtilitySpecific[i]) {
+                uint256 remainingUses = _allUtilities[i].remainingUses;
+                // If the utility's remaining uses for this token were modified, get that value
+                if (_utilityHasBeenUsed[tokenId][i] == true) {
+                    remainingUses = _utilityRemainingUsesOfToken[tokenId][i];
                 }
-
-                if (!utility.deleted) {
-                    utilities[currentUtilityIndex++] = UtilityData(utility.uri, utility.remainingUses, utility.expiryTimestamp, utility.deleted);
-                }
+                
+                utilities[currentIndex] = UtilityData(_allUtilities[i].uri, remainingUses, _allUtilities[i].expiryTimestamp, _allUtilities[i].deleted);
+                currentIndex++;
             }
         }
 
-        return utilities;
+        // Resize utilities array to return
+        UtilityData[] memory utilitiesPerm = new UtilityData[](currentIndex);
+        for(uint256 i = 0; i < currentIndex; i++) {
+            utilitiesPerm[i] = utilities[i];
+        }
+
+        return utilitiesPerm;
     }
 
 }
