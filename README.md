@@ -20,8 +20,6 @@ Using Paradigm's [Foundry](https://github.com/foundry-rs/foundry)
 
 ## Usage
 
-Note: In real implementation, tokenIds would be NFT holders' addresses
-
 **1. Adding Utilities:**
 
 - For specific tokens:

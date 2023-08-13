@@ -122,7 +122,7 @@ contract NFTUtilities is AccessControl {
             require(_tokenHasUtility[tokenId][utilityId], "NFTUtilities: This token doesn't have the specified utility");
         }
         require(!_allUtilities[utilityId].deleted, "NFTUtilities: This utility has been deleted");
-        //require(_allUtilities[utilityId].expiryTimestamp > block.timestamp, "NFTUtilities: utility has expired");
+        require(_allUtilities[utilityId].expiryTimestamp > block.timestamp, "NFTUtilities: utility has expired");
 
 
         // Check if the utility's remaining uses for this token was ever initialized, if not, set it.
