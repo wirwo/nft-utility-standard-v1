@@ -6,6 +6,7 @@ import "../node_modules/@openzeppelin/contracts/access/Ownable.sol";
 import "../node_modules/@openzeppelin/contracts/token/ERC721/extensions/IERC721Enumerable.sol";
 import "../node_modules/@openzeppelin/contracts/access/AccessControl.sol";
 import "./UtilityLibrary.sol";
+import {HelperConfig} from "../script/HelperConfig.s.sol";
 
 /**
  * @title IOwnable Interface
@@ -40,13 +41,10 @@ contract NFTUtilities is AccessControl {
     uint256 private _globalUtilityCounter = 0;
 
     /**
-     * @dev Sets the NFT contract address and initializes utilities.
      * Requires the caller to be the owner of the NFT contract.
-     * @param _NFT address of the NFT contract.
      */
-    constructor(address _NFT) {
-        require(IOwnable(_NFT).owner() == _msgSender(), "NFTUtilities: Deployer is not owner of the NFT contract");
-        NFT = IOwnable(_NFT);
+    constructor(address nftContract) {
+        require(IOwnable(nftContract).owner() == _msgSender(), "NFTUtilities: Deployer is not owner of the NFT contract");
     }
 
     /**

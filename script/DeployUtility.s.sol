@@ -3,11 +3,15 @@ pragma solidity ^0.8.19;
 
 import {Script} from "../lib/forge-std/src/Script.sol";
 import {NFTUtilities} from "../src/utility.sol";
+import {HelperConfig} from "./HelperConfig.s.sol";
 
 contract DeployUtility is Script {
     function run() external returns (NFTUtilities) {
+        HelperConfig helperConfig = new HelperConfig();
+        address nftContract = helperConfig.activeNetworkConfig();
+        
         vm.startBroadcast();
-        NFTUtilities utility = new NFTUtilities(0x73A4b3b1a6C5C883ecD796D0dd5eD4f4e1E78d2b);
+        NFTUtilities utility = new NFTUtilities(nftContract);
         vm.stopBroadcast();
         return utility;
     }

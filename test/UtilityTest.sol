@@ -7,28 +7,30 @@ import {DeployUtility} from "../script/DeployUtility.s.sol";
 import {NFTUtilities} from "../src/utility.sol";
 
 contract UtilityTest is Test {
-    function testDeployUtility() public {
-        NFTUtilities utility = new DeployUtility().run();
-        assertEq(address(utility), 0x73A4b3b1a6C5C883ecD796D0dd5eD4f4e1E78d2b);
-    }
+  NFTUtilities utility;
+  
+  function setUp() external {
+    DeployUtility deployUtility = new DeployUtility();
+    utility = deployUtility.run();
+  }
 
-    // Test adding utility to specific tokens
-    function testAddUtility() public {
-    }
+  // Test adding utility to specific tokens
+  function testAddUtility() public {
+  }
 
-    // Test adding utility to all tokens
-    function testAddUtilityToAll() public {
-    }
+  // Test adding utility to all tokens
+  function testAddUtilityToAll() public {
+  }
 
-    // Test editing an existing utility
-    function testEditUtility() public {
-    }
+  // Test editing an existing utility
+  function testEditUtility() public {
+  }
 
-    // Test deleting a utility
-    function testDeleteUtility() public {
-    }
+  // Test deleting a utility
+  function testDeleteUtility() public {
+  }
 
-    // Test using a utility
-    function testUseUtility() public {
-    }
+  // Test using a utility
+  function testUseUtility() public {
+  }
 }
