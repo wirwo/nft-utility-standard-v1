@@ -45,6 +45,7 @@ contract NFTUtilities is AccessControl {
      */
     constructor(address nftContract) {
         require(IOwnable(nftContract).owner() == _msgSender(), "NFTUtilities: Deployer is not owner of the NFT contract");
+        NFT = IOwnable(nftContract);
     }
 
     /**

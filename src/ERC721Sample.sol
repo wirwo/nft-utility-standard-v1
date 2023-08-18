@@ -9,11 +9,4 @@ contract SimpleERC721 is ERC721Enumerable, Ownable {
     uint256 private _currentTokenId = 0;
 
     constructor() ERC721("SimpleERC721", "SERC721") {}
-
-    function mint() external onlyOwner {
-        require(_currentTokenId < MAX_SUPPLY, "All tokens have been minted");
-
-        _safeMint(msg.sender, _currentTokenId);
-        _currentTokenId = _currentTokenId + 1;
-    }
 }

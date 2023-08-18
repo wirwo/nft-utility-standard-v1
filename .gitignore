@@ -10,7 +10,10 @@ out/
 # Docs
 docs/
 
+Makefile
+
 # Dotenv file
 .env
 node_modules/
-```
+broadcast/
+lib/
