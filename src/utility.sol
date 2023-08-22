@@ -7,31 +7,44 @@ import "../node_modules/@openzeppelin/contracts/token/ERC721/extensions/IERC721E
 import "../node_modules/@openzeppelin/contracts/access/AccessControl.sol";
 import "./UtilityLibrary.sol";
 import {HelperConfig} from "../script/HelperConfig.s.sol";
+import "../lib/forge-std/src/console.sol";
+
+error Utility__TokenIdNotFound();
+error Utility__UtilityNotFound();
+error Utility__UtilityDeleted();
+error Utility__UtilityExpired();
+error Utility__TokenNoHaveUtility();
+error Utility__UtilityOutOfUse();
 
 /**
  * @title IOwnable Interface
- * @dev Provides an interface for querying the owner of a contract and the maximum supply of its tokens.
+ * @dev Interface for querying the owner of a contract and the maximum supply of its tokens.
  */
-interface IOwnable {    
-        function owner() external view returns (address);
-        function MAX_SUPPLY() external view returns (uint256);
-    }
+interface IOwnable {
+    function owner() external view returns (address);
+    function MAX_SUPPLY() external view returns (uint256);
+}
 
 /**
  * @title NFT Utilities
- * @dev Provides utility management for NFTs, including creating, modifying, deleting, and using utilities.
+ * @dev Contract for utility management of NFTs: creating, modifying, deleting, and using utilities.
  * Ensures only NFT holders can manage utilities and provides utility querying for each token.
  */
 contract NFTUtilities is AccessControl {
-    using Utilities for Utilities.Utility[];
     
+    struct UtilityData {
+        string uri;
+        uint256 remainingUses;
+        uint256 expiryTimestamp;
+        bool deleted;
+    }
+
     IOwnable public NFT;
 
-    // Mappings for utility data and tracking
+    // Utility tracking and metadata mappings
     mapping(uint256 => Utilities.Utility) private _allUtilities;
-
-    // Utility metadata mappings
     mapping(uint256 => bool) private _isUtilitySpecific;
+    mapping(uint256 => bool) private _utilityIdPresent;
     mapping(uint256 => uint256[]) private _utilitiesOfToken;
     mapping(uint256 => mapping(uint256 => uint256)) private _utilityRemainingUsesOfToken;
     mapping(uint256 => mapping(uint256 => bool)) private _utilityHasBeenUsed;
@@ -41,7 +54,8 @@ contract NFTUtilities is AccessControl {
     uint256 private _globalUtilityCounter = 0;
 
     /**
-     * Requires the caller to be the owner of the NFT contract.
+     * @dev Ensures the caller is the owner of the NFT contract and initializes the contract with the provided NFT address.
+     * @param nftContract The address of the NFT contract.
      */
     constructor(address nftContract) {
         require(IOwnable(nftContract).owner() == _msgSender(), "NFTUtilities: Deployer is not owner of the NFT contract");
@@ -61,16 +75,17 @@ contract NFTUtilities is AccessControl {
             uint256 id = tokenIds[i];
 
             // Ensure the token ID is within the valid range
-            require(id < NFT.MAX_SUPPLY(), "NFTUtilities: tokenId exceeds total supply");
-            
+            if(id > NFT.MAX_SUPPLY()) revert Utility__TokenIdNotFound();
+
             Utilities.Utility storage utility = _allUtilities[_globalUtilityCounter];
             Utilities.addDynamicUtility(utility, _globalUtilityCounter, utilityURI, utilityUses, utilityExpiry);
 
             _utilitiesOfToken[id].push(_globalUtilityCounter);
-            _isUtilitySpecific[_globalUtilityCounter] = true;
             _tokenHasUtility[id][_globalUtilityCounter] = true;
 
         }
+        _isUtilitySpecific[_globalUtilityCounter] = true;
+        _utilityIdPresent[_globalUtilityCounter] = true;
         _globalUtilityCounter++;
     }
 
@@ -85,7 +100,7 @@ contract NFTUtilities is AccessControl {
         Utilities.Utility storage utility = _allUtilities[_globalUtilityCounter];
         Utilities.addDynamicUtility(utility, _globalUtilityCounter, utilityURI, utilityUses, utilityExpiry); 
         _isUtilitySpecific[_globalUtilityCounter] = false;
-
+        _utilityIdPresent[_globalUtilityCounter] = true;
         _globalUtilityCounter++;
     }
 
@@ -98,6 +113,7 @@ contract NFTUtilities is AccessControl {
      * @param newExpiry Updated expiration timestamp for the utility.
      */
     function editUtility(uint256 utilityId, string memory newUtilityURI, uint256 newUses, uint256 newExpiry) public {
+        if(!_utilityIdPresent[utilityId]) revert Utility__UtilityNotFound();
         Utilities.editDynamicUtility(_allUtilities[utilityId], newUtilityURI, newUses, newExpiry);
     }
 
@@ -107,6 +123,7 @@ contract NFTUtilities is AccessControl {
      * @param utilityId ID of the utility to be deleted.
      */
     function deleteUtility(uint256 utilityId) public {
+        if(!_utilityIdPresent[utilityId]) revert Utility__UtilityNotFound();
         Utilities.deleteDynamicUtility(_allUtilities[utilityId]);
     }
 
@@ -116,33 +133,26 @@ contract NFTUtilities is AccessControl {
      * @param utilityId ID of the utility to be used.
      */
     function useUtility(uint256 tokenId, uint256 utilityId) public {
-        // Check other utility conditions
+        if(_allUtilities[utilityId].deleted) revert Utility__UtilityDeleted();
+        if(_allUtilities[utilityId].expiryTimestamp < block.timestamp) revert Utility__UtilityExpired();
+        
+        // Check if token has utilityId
         if(_isUtilitySpecific[utilityId]){
-            require(_tokenHasUtility[tokenId][utilityId], "NFTUtilities: This token doesn't have the specified utility");
+            if(!_tokenHasUtility[tokenId][utilityId]) revert Utility__TokenNoHaveUtility();
         }
-        require(!_allUtilities[utilityId].deleted, "NFTUtilities: This utility has been deleted");
-        require(_allUtilities[utilityId].expiryTimestamp > block.timestamp, "NFTUtilities: utility has expired");
-
 
         // Check if the utility's remaining uses for this token was ever initialized, if not, set it.
         if (_utilityHasBeenUsed[tokenId][utilityId] == false) {
-            require(_allUtilities[utilityId].remainingUses > 0, "NFTUtilities: no remaining uses for utility");
+            if(_allUtilities[utilityId].remainingUses < 1) revert Utility__UtilityOutOfUse();
             _utilityRemainingUsesOfToken[tokenId][utilityId] = _allUtilities[utilityId].remainingUses;
             _utilityHasBeenUsed[tokenId][utilityId] = true;
         }
         else{
-            require(_utilityRemainingUsesOfToken[tokenId][utilityId] > 0, "NFTUtilities: no remaining uses for utility");
+            if(_utilityRemainingUsesOfToken[tokenId][utilityId] < 1) revert Utility__UtilityOutOfUse();
         }
 
         // Reduce the remaining uses by 1 for the specific tokenId
         _utilityRemainingUsesOfToken[tokenId][utilityId]--;
-    }
-    
-    struct UtilityData {
-        string uri;
-        uint256 remainingUses;
-        uint256 expiryTimestamp;
-        bool deleted;
     }
     
     /**
@@ -151,7 +161,7 @@ contract NFTUtilities is AccessControl {
      * @return An array of utility data associated with the specified NFT token.
      */
     function getUtility(uint256 tokenId) public view returns (UtilityData[] memory) {
-        require(tokenId < NFT.MAX_SUPPLY(), "NFTUtilities: tokenId exceeds total supply");
+        if(tokenId > NFT.MAX_SUPPLY()) revert Utility__TokenIdNotFound();
 
         // Create an array that is long enough to hold both specific and global utilities
         UtilityData[] memory utilities = new UtilityData[](_globalUtilityCounter);
@@ -188,12 +198,12 @@ contract NFTUtilities is AccessControl {
         }
 
         // Resize utilities array to return
-        UtilityData[] memory utilitiesPerm = new UtilityData[](currentIndex);
+        UtilityData[] memory utilitiesPreview = new UtilityData[](currentIndex);
         for(uint256 i = 0; i < currentIndex; i++) {
-            utilitiesPerm[i] = utilities[i];
+            utilitiesPreview[i] = utilities[i];
         }
 
-        return utilitiesPerm;
+        return utilitiesPreview;
     }
 
 }
