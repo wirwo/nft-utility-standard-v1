@@ -205,5 +205,5 @@ contract NFTUtilities is AccessControl {
 
         return utilitiesPreview;
     }
-
+	
 }
